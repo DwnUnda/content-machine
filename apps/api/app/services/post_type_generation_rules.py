@@ -482,20 +482,9 @@ Required HTML structure:
     [H1]
     [PROBLEM_FOCUSED_INTRO — explain the specific problem/use-case (the "for Y"
      part) and why product selection matters for it. Max 120 words.]
-    <nav class="jump-links" aria-label="Quick article navigation">
-      [SHORT_JUMP_LINKS — 4 to 5 anchors pointing to top picks, quick comparison,
-       use-case fit, full reviews, FAQ]
-    </nav>
     <div class="top-picks-grid">
       [TOP_PICK_CARDS — 2–3 product cards, each explicitly tied to the use case]
     </div>
-  </section>
-
-  <section class="use-case-decision-box">
-    <h2>Which one suits your situation?</h2>
-    [FAST_USE_CASE_RECOMMENDATIONS — e.g. "For severe mould: [Product A].
-     For mild dampness: [Product B]. For large rooms: [Product C]."
-     Be specific; do not be vague.]
   </section>
 
   <section class="comparison-section">
@@ -503,6 +492,20 @@ Required HTML structure:
       [USE_CASE_COMPARISON_TABLE — columns must be tied to the specific use
        case, not just generic specs. Include a "Use-case fit" column.]
     </div>
+  </section>
+
+  <section class="jump-links-section">
+    <nav class="jump-links" aria-label="Quick article navigation">
+      [SHORT_JUMP_LINKS — 4 to 5 anchors pointing to top picks, quick comparison,
+       use-case fit, full reviews, FAQ]
+    </nav>
+  </section>
+
+  <section class="use-case-decision-box">
+    <h2>Which one suits your situation?</h2>
+    [FAST_USE_CASE_RECOMMENDATIONS — e.g. "For severe mould: [Product A].
+     For mild dampness: [Product B]. For large rooms: [Product C]."
+     Be specific; do not be vague.]
   </section>
 
   <section class="methodology-box">
@@ -574,8 +577,9 @@ Rules:
 - Common mistakes and buying criteria must be use-case-specific.
 - Do not recommend products just because they are popular or well-reviewed in
   general — justify them for this specific use case.
+- Put the top-picks grid immediately after the intro, then the comparison table.
+- Add the jump-links nav after the comparison table so commercial content leads.
 - Include a use-case-decision-box near the top with fast, specific guidance.
-- Add a short jump-links nav before the top-picks grid.
 - Match every top-pick `Read review` link to a deep-review block id in the form
   `product-name-review`.
 """

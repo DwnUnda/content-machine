@@ -192,9 +192,9 @@ COMMERCIAL_MODULE_BLUEPRINTS = {
     ],
     PostType.BEST_X_FOR_Y.value: [
         ("top_picks", ("Top picks",)),
+        ("comparison", ("Quick comparison",)),
         ("jump_links", ("Jump links",)),
         ("decision_grid", ("Which one suits your situation?", "Which one should you buy?")),
-        ("comparison", ("Quick comparison",)),
         ("methodology", ("How we chose these products",)),
         ("context", ("Why the right product matters for",)),
         ("product_reviews", ("Recommended air purifiers for mould — full reviews", "Best")),
