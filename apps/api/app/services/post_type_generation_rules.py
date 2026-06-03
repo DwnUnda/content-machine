@@ -72,6 +72,22 @@ Do NOT invent product prices, specs, warranties, ratings, or review counts.
 Do NOT invent affiliate URLs. Use this placeholder for every CTA button:
   <a class="button cta-button" href="#" data-product="PRODUCT_NAME">Check latest price</a>
 If a product URL is present in the product data, use that URL instead of "#".
+
+Commercial content-density rules:
+- For money_post and best_x_for_y drafts, aim for roughly 3,200-4,500 words
+  unless the brief clearly requires a deeper guide.
+- The first answer, top picks, comparison table and use-case split carry the
+  buyer intent. Supporting sections must add new decision value, not restate
+  the same recommendation logic.
+- Product review blocks should be concise: about 250-450 words per product,
+  with only the evidence, drawbacks and fit notes that change the buying
+  decision.
+- FAQ sections should use 6-8 high-intent questions with short answers. Do not
+  repeat the buyer guide or product reviews.
+- Final recommendations should be 150-250 words and should not recap every
+  product in full.
+- If a section adds no new decision-making value, merge it, shorten it or omit
+  it.
 """
 
 # ---------------------------------------------------------------------------

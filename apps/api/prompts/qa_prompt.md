@@ -32,6 +32,17 @@ Required and optional block coverage:
   optional block.
 - Do NOT reward padding. A block only counts if it adds genuine, specific value.
 
+Content density rule:
+- Do not reward length by itself.
+- For commercial drafts, flag repeated advice across top picks, product reviews,
+  buyer guides, mistakes, FAQs and final recommendations.
+- Add a warning if a commercial draft feels padded, if the FAQ is oversized, or
+  if product reviews repeat comparison-table points without adding useful buyer
+  evidence, drawbacks or fit notes.
+- Treat excessive repetition as a failed check when it makes the draft harder to
+  use, buries recommendations, or creates a generic affiliate-article feel.
+- Prefer concise sections with clear decision value over exhaustive coverage.
+
 Internal link rule for this stage:
 - Treat the current QA run as draft-generation QA unless the input explicitly says publish-ready or final-publish mode.
 - If the draft has no internal links and no internal link suggestions, do not fail QA for that alone. Add a warning only.
