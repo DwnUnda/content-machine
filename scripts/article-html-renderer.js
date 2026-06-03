@@ -208,6 +208,30 @@ function buildTableOfContentsHtml(items) {
   ].join('\n');
 }
 
+function isSafeInternalPath(value) {
+  const url = String(value || '').trim();
+  return /^\/[a-z0-9][a-z0-9/_-]*\/?(?:#[a-z0-9_-]+)?$/i.test(url);
+}
+
+function addRelatedBuyingGuideBoxes(html) {
+  return String(html || '').replace(
+    /<p>\s*\[\[RELATEDBUYINGGUIDE\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]\]\s*<\/p>/gi,
+    (_match, title, description, url, label) => {
+      const cleanUrl = decodeHtmlEntities(url).trim();
+      if (!isSafeInternalPath(cleanUrl)) {
+        return '';
+      }
+      return [
+        '<aside class="related-buying-guide">',
+        `  <h3>${escapeHtml(decodeHtmlEntities(title).trim())}</h3>`,
+        `  <p>${escapeHtml(decodeHtmlEntities(description).trim())}</p>`,
+        `  <a href="${escapeHtml(cleanUrl)}">${escapeHtml(decodeHtmlEntities(label).trim())}</a>`,
+        '</aside>',
+      ].join('\n');
+    },
+  );
+}
+
 function stripTags(value) {
   return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -634,14 +658,15 @@ function renderArticleHtml(content, options = {}) {
     const html = `${buildScopedStyleBlock()}\n<div class="hdl-article-content">\n${stripFirstHeadingTag(normalizeHtmlContent(body))}\n</div>`;
     return wordpressBlocks ? wrapGutenbergHtmlBlock(html) : html;
   }
+  const markdownHtml = markdownToHtml(body, {
+    stripFirstH1: true,
+    stripHorizontalRules: true,
+    wrapContainer: true,
+    wrapSpecialSections: true,
+    warnings: [],
+  });
   const html = addJumpLinks(
-    addTableOfContents(enhanceArticleHtml(markdownToHtml(body, {
-      stripFirstH1: true,
-      stripHorizontalRules: true,
-      wrapContainer: true,
-      wrapSpecialSections: true,
-      warnings: [],
-    }), postType, contentModules), postType),
+    addTableOfContents(enhanceArticleHtml(addRelatedBuyingGuideBoxes(markdownHtml), postType, contentModules), postType),
     postType,
   );
   return wordpressBlocks ? wrapGutenbergHtmlBlock(html) : html;

@@ -73,6 +73,11 @@ MINIMUM_WORD_COUNTS = {
     PostType.PRODUCT_COMPARISON.value: 1500,
     PostType.INFORMATIONAL_BLOG.value: 1200,
 }
+INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS = 2200
+INFORMATIONAL_SUPPORT_HARD_MAX_WORDS = 2700
+INFORMATIONAL_SUPPORT_MAX_H2S = 9
+INFORMATIONAL_SUPPORT_HARD_MAX_H2S = 12
+INFORMATIONAL_SUPPORT_MAX_FAQS = 6
 
 
 def _draft_max_output_tokens(job: ArticleJob) -> int:
@@ -251,6 +256,126 @@ def _count_words(value: str | None) -> int:
     if not value:
         return 0
     return len([word for word in value.split() if word.strip()])
+
+
+def _count_h2_headings(value: str | None) -> int:
+    text = value or ""
+    markdown_h2s = len(re.findall(r"(?m)^##\s+\S", text))
+    html_h2s = len(re.findall(r"<h2\b", text, flags=re.IGNORECASE))
+    return markdown_h2s + html_h2s
+
+
+def _count_faq_questions(value: str | None) -> int:
+    text = value or ""
+    faq_match = re.search(
+        r"(?ims)(?:^##\s+(?:FAQ|Frequently asked questions)\s*$|<h2[^>]*>\s*(?:FAQ|Frequently asked questions)\s*</h2>)([\s\S]*)",
+        text,
+    )
+    if not faq_match:
+        return 0
+    faq_body = re.split(r"(?im)^##\s+|<h2\b", faq_match.group(1), maxsplit=1)[0]
+    question_headings = len(re.findall(r"(?m)^###\s+.+\?", faq_body)) + len(re.findall(r"<h3\b[\s\S]*?\?</h3>", faq_body, flags=re.IGNORECASE))
+    if question_headings:
+        return question_headings
+    return len(re.findall(r"\?", faq_body))
+
+
+def _is_explicit_pillar_request(context: dict) -> bool:
+    article = context.get("article_job") or {}
+    brief = ((context.get("research_brief") or {}).get("outline_json") or {})
+    haystack = " ".join(
+        str(value or "")
+        for value in [
+            article.get("title"),
+            article.get("primary_keyword"),
+            article.get("notes"),
+            article.get("australian_angle"),
+            brief.get("recommended_article_angle"),
+            brief.get("search_intent"),
+        ]
+    ).lower()
+    return any(
+        token in haystack
+        for token in (
+            "pillar",
+            "ultimate guide",
+            "complete guide",
+            "comprehensive guide",
+            "definitive guide",
+            "everything you need",
+            "in-depth guide",
+        )
+    )
+
+
+def _apply_informational_density_guardrails(
+    *,
+    context: dict,
+    word_count: int,
+    failed_checks: list,
+    warnings: list,
+    fix_instructions: list,
+    score: float,
+    passed: bool,
+    threshold: int,
+    draft_markdown: str,
+) -> tuple[list, list, list, float, bool, int | None, bool | None]:
+    if context["article_job"]["post_type"] != PostType.INFORMATIONAL_BLOG.value:
+        return failed_checks, warnings, fix_instructions, score, passed, None, None
+
+    support_style = not _is_explicit_pillar_request(context)
+    if not support_style:
+        return failed_checks, warnings, fix_instructions, score, passed, None, None
+
+    h2_count = _count_h2_headings(draft_markdown)
+    faq_count = _count_faq_questions(draft_markdown)
+    max_word_count = INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS
+
+    if word_count > INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS:
+        warnings = [
+            *warnings,
+            (
+                f"Support-style informational article is long at {word_count} words. "
+                f"Target 1,200-2,000 words and keep only sections that answer the core intent."
+            ),
+        ]
+        fix_instructions = [
+            *fix_instructions,
+            "Tighten this support article to about 1,500-1,900 words unless the brief explicitly requires a pillar guide.",
+        ]
+    if word_count > INFORMATIONAL_SUPPORT_HARD_MAX_WORDS:
+        failed_checks = [
+            *failed_checks,
+            (
+                f"Support-style informational article is too broad: {word_count} words exceeds the "
+                f"{INFORMATIONAL_SUPPORT_HARD_MAX_WORDS}-word hard guardrail without explicit pillar intent."
+            ),
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if h2_count > INFORMATIONAL_SUPPORT_MAX_H2S:
+        warnings = [
+            *warnings,
+            f"Support-style informational article has {h2_count} H2 sections. Merge related sections and aim for 6-9 H2s.",
+        ]
+        fix_instructions = [*fix_instructions, "Merge overlapping informational sections so the article reads like a focused support post, not a pillar guide."]
+    if h2_count >= INFORMATIONAL_SUPPORT_HARD_MAX_H2S:
+        failed_checks = [
+            *failed_checks,
+            f"Support-style informational article has too many major sections ({h2_count} H2s).",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if faq_count > INFORMATIONAL_SUPPORT_MAX_FAQS:
+        warnings = [
+            *warnings,
+            f"FAQ is oversized for a support article ({faq_count} questions). Use 4-6 short FAQs.",
+        ]
+        fix_instructions = [*fix_instructions, "Reduce the FAQ to 4-6 questions that do not repeat the body."]
+
+    return failed_checks, warnings, fix_instructions, score, passed, max_word_count, word_count <= max_word_count
 
 
 def _normalise_content_modules(value) -> list[dict]:
@@ -442,6 +567,63 @@ def _brief_rules_summary(brief_outline: dict | None) -> dict:
         "forbidden_claims": outline.get("forbidden_claims"),
         "tone_rules": outline.get("tone_rules"),
         "product_requirements": outline.get("product_requirements"),
+    }
+
+
+def _normalise_internal_path(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.startswith("http://") or text.startswith("https://"):
+        return None
+    path = "/" + text.strip("/")
+    return f"{path}/"
+
+
+def _build_internal_link_targets(db: Session, job: ArticleJob) -> dict:
+    cluster = getattr(job, "content_cluster", None)
+    primary_cta = None
+    if cluster and cluster.target_url_slug:
+        primary_cta = {
+            "label": cluster.name,
+            "url": _normalise_internal_path(cluster.target_url_slug),
+            "source": "content_cluster.target_url_slug",
+            "notes": cluster.notes,
+        }
+    related_articles = []
+    if job.cluster_id:
+        rows = list(
+            db.scalars(
+                select(ArticleJob)
+                .where(ArticleJob.cluster_id == job.cluster_id, ArticleJob.id != job.id)
+                .order_by(desc(ArticleJob.updated_at))
+            ).all()
+        )
+        for row in rows[:8]:
+            related_articles.append(
+                {
+                    "id": row.id,
+                    "title": row.title,
+                    "primary_keyword": row.primary_keyword,
+                    "post_type": row.post_type,
+                    "status": row.status,
+                }
+            )
+    return {
+        "primary_cta": primary_cta if primary_cta and primary_cta.get("url") else None,
+        "cluster": (
+            {
+                "id": cluster.id,
+                "name": cluster.name,
+                "description": cluster.description,
+                "target_url_slug": _normalise_internal_path(cluster.target_url_slug),
+                "notes": cluster.notes,
+            }
+            if cluster
+            else None
+        ),
+        "related_articles": related_articles,
+        "rule": "Use only these URLs for internal CTA boxes. Do not invent internal URLs.",
     }
 
 
@@ -779,6 +961,7 @@ def _build_context(db: Session, job: ArticleJob) -> dict:
             ),
         },
         "content_rules": _content_rule_map(db),
+        "internal_link_targets": _build_internal_link_targets(db, job),
         "post_type_generation_rules": get_post_type_generation_rules(job.post_type),
     }
 
@@ -1211,6 +1394,7 @@ def _build_edit_input(context: dict, draft_markdown: str) -> dict:
         },
         "research_brief": _brief_rules_summary(brief_outline),
         "serp_intent": _serp_intent_blocks_summary(context.get("serp_intent")),
+        "internal_link_targets": context.get("internal_link_targets"),
         "products": context["products"],
         "products_available": context["products_available"],
         "product_policy": context["product_policy"],
@@ -1247,6 +1431,7 @@ def _build_fix_input(context: dict, draft_markdown: str, qa_findings: dict | Non
         },
         "research_brief": _brief_rules_summary(brief_outline),
         "serp_intent": _serp_intent_blocks_summary(context.get("serp_intent")),
+        "internal_link_targets": context.get("internal_link_targets"),
         "products": context["products"],
         "products_available": context["products_available"],
         "product_policy": context["product_policy"],
@@ -1275,6 +1460,7 @@ def _build_repair_input(context: dict, current_markdown: str, *, stage: str) -> 
         },
         "research_brief": _brief_rules_summary(brief_outline),
         "serp_intent": _serp_intent_blocks_summary(context.get("serp_intent")),
+        "internal_link_targets": context.get("internal_link_targets"),
         "products": context["products"],
         "products_available": context["products_available"],
         "product_policy": context["product_policy"],
@@ -1454,10 +1640,12 @@ def _build_seo_input(db: Session, job: ArticleJob, draft: ArticleDraft, context:
             "suggested_slug": brief_outline.get("suggested_slug"),
             "meta_description_draft": brief_outline.get("meta_description_draft"),
         },
+        "internal_link_targets": context.get("internal_link_targets"),
         "products": context["products"][:3],
     }
     return {
         "article_context": compact_context,
+        "internal_link_targets": context.get("internal_link_targets"),
         "draft_markdown": draft.draft_markdown,
     }
 
@@ -1501,6 +1689,8 @@ def run_qa(db: Session, job: ArticleJob, *, stage: str = "initial") -> dict:
         word_count = _count_words(draft.draft_markdown)
         minimum_word_count = MINIMUM_WORD_COUNTS.get(job.post_type)
         word_count_passed = minimum_word_count is None or word_count >= minimum_word_count
+        maximum_word_count = None
+        maximum_word_count_passed = None
         failed_checks = qa_response.get("failed_checks") or []
         warnings = qa_response.get("warnings") or []
         fix_instructions = qa_response.get("fix_instructions") or []
@@ -1525,6 +1715,25 @@ def run_qa(db: Session, job: ArticleJob, *, stage: str = "initial") -> dict:
             score = min(score, float(threshold - 1))
             passed = False
             summary = f"{summary} {word_count_message}".strip() if summary else word_count_message
+        (
+            failed_checks,
+            warnings,
+            fix_instructions,
+            score,
+            passed,
+            maximum_word_count,
+            maximum_word_count_passed,
+        ) = _apply_informational_density_guardrails(
+            context=context,
+            word_count=word_count,
+            failed_checks=failed_checks,
+            warnings=warnings,
+            fix_instructions=fix_instructions,
+            score=score,
+            passed=passed,
+            threshold=threshold,
+            draft_markdown=draft.draft_markdown,
+        )
         serp_intent_for_qa = context.get("serp_intent") or {}
         findings = {
             "stage": stage,
@@ -1539,6 +1748,8 @@ def run_qa(db: Session, job: ArticleJob, *, stage: str = "initial") -> dict:
             "word_count": word_count,
             "minimum_word_count": minimum_word_count,
             "minimum_word_count_passed": word_count_passed,
+            "maximum_word_count": maximum_word_count,
+            "maximum_word_count_passed": maximum_word_count_passed,
             "required_blocks_checked": serp_intent_for_qa.get("required_blocks") or [],
             "optional_blocks_checked": serp_intent_for_qa.get("optional_blocks") or [],
         }

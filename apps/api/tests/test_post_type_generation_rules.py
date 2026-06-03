@@ -22,6 +22,14 @@ def test_informational_blog_contains_article_class():
     assert "Source format: Markdown" in rules
 
 
+def test_informational_blog_rules_include_support_article_guardrails():
+    rules = get_post_type_generation_rules("informational_blog")
+    assert "support article" in rules
+    assert "1,200-2,000 words" in rules
+    assert "4-6 questions max" in rules
+    assert "[[RELATEDBUYINGGUIDE|" in rules
+
+
 def test_single_product_review_contains_article_class():
     rules = get_post_type_generation_rules("single_product_review")
     assert '<article class="single-product-review">' in rules

@@ -104,15 +104,22 @@ _INFORMATIONAL_BLOG_RULES = """
 
 Source format: Markdown
 
-Generate a standard informational SEO blog post. This is NOT a buyer guide —
-do not include product cards, aggressive CTAs, or buyer-decision frameworks
+Generate a focused informational SEO blog post. This is NOT a buyer guide —
+do not include product cards, aggressive CTAs, or full buyer-decision frameworks
 unless the keyword specifically demands product recommendations.
+
+Most informational_blog drafts for Home Dry Lab are support articles: they answer
+one practical search intent clearly, then route readers toward the most relevant
+commercial guide or deeper support article. Do not turn a support article into a
+mini pillar page unless the brief, SERP intent or user notes explicitly request a
+comprehensive pillar guide.
 
 Purpose:
 - Answer the search intent clearly.
 - Educate the reader.
 - Build topical authority on the site.
 - Support internal linking to related commercial pages where relevant.
+- Feed money pages without competing with them.
 
 Rendered HTML wrapper target:
 
@@ -122,7 +129,16 @@ Required markdown structure:
 
 # [TITLE]
 
-[SHORT INTRO — 2–3 sentences, state the problem or question and why it matters]
+[SHORT INTRO — 2–3 sentences. For question/problem keywords, answer the main
+question within the first 150 words.]
+
+## Short answer
+[DIRECT ANSWER — practical, plain-English, no bloated setup]
+
+[RELATED_BUYING_GUIDE marker — include only when `internal_link_targets.primary_cta`
+is present in the input context. Use exactly this single-line marker format:
+[[RELATEDBUYINGGUIDE|Need help choosing?|One short sentence explaining the
+related buying guide.|/target-slug/|View the guide]]]
 
 ## [Main topic / first subtopic]
 [CONTENT]
@@ -139,15 +155,37 @@ Required markdown structure:
 ## Final thoughts
 [CONCLUSION — practical summary, not a sales pitch]
 
+Support article length and scope:
+- For direct question, problem-solving, troubleshooting, cost, health-adjacent,
+  rental, or "does/how/when/what" keywords, treat the draft as a support article
+  unless the brief explicitly asks for a pillar guide.
+- Support articles should usually be 1,200-2,000 words, ideally around
+  1,500-1,800 words.
+- Do not exceed about 2,200 words for a support article unless the user notes,
+  SERP intent, or brief explicitly request a comprehensive/pillar guide.
+- Use about 6-9 H2 sections for support articles. If the outline wants more,
+  merge related sections.
+- FAQ sections in support articles should use 4-6 questions max with short
+  answers.
+- Compress sizing, running-cost, product-choice, rental, seasonal, and buying
+  guidance unless those are the primary keyword intent.
+- If buying guidance is relevant, summarise it briefly and link to the related
+  buying guide instead of becoming a buyer guide.
+- Avoid repeating the same point across the body, FAQ and conclusion.
+
 Structure rules:
 - Keep the intro short (2–3 sentences).
 - Use a clear H2/H3 hierarchy.
 - Write scannable paragraphs (3–4 sentences max).
-- Use bullet lists and tables where they genuinely aid comprehension.
+- Use bullet lists and real markdown tables where they genuinely aid
+  comprehension. If using a table, use valid markdown table syntax with a header
+  row and separator row; never write flattened table-like text.
 - Include an FAQ section when search intent is clearly informational.
 - Do not include product cards or product CTAs unless products are specifically
   required by the keyword and product data is available.
 - No aggressive affiliate CTAs.
+- Include 1-3 light internal CTA boxes only when real internal link targets are
+  provided in the input context. Never invent internal URLs.
 
 Tone:
 - Useful, direct, practical.

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
 from app.main import app
-from app.models.entities import ArticleBrief, ArticleDraft, ArticleJob, ArticleJobProduct, CompetitorAnalysisReport, CompetitorPage, KeywordResearch, Product, QaReport, SerpResult
+from app.models.entities import ArticleBrief, ArticleDraft, ArticleJob, ArticleJobProduct, CompetitorAnalysisReport, CompetitorPage, ContentCluster, KeywordResearch, Product, QaReport, SerpResult
 from app.services import article_drafting as ad
 from app.services.anthropic_client import AnthropicClient, AnthropicError
 from app.services.article_drafting import generate_draft, run_fix_pass, run_human_edit, run_qa
@@ -504,5 +504,67 @@ def test_qa_fails_draft_below_minimum_word_count(monkeypatch):
         assert "Minimum 1500 words required" in " ".join(report.findings_json["failed_checks"])
         qa_row = db.get(ArticleJob, job["id"])
         assert qa_row.current_qa_score == 84
+    finally:
+        db.close()
+
+
+def test_qa_fails_overlong_support_style_informational_draft(monkeypatch):
+    client = TestClient(app)
+    job = _create_job(client, post_type="informational_blog")
+    db = SessionLocal()
+    try:
+        _seed_brief(db, job["id"])
+        openai_payloads = [
+            {"score": 96, "passed": True, "failed_checks": [], "warnings": [], "fix_instructions": [], "manual_override_risk": "low", "summary": "Looks strong."},
+            {"seo_title": "Title", "meta_description": "Meta", "slug": "slug", "excerpt": "Excerpt"},
+        ]
+        monkeypatch.setattr(OpenAIClient, "generate_json", lambda self, **kwargs: openai_payloads.pop(0))  # noqa: ARG005
+
+        db.add(
+            ArticleDraft(
+                article_job_id=job["id"],
+                version=1,
+                stage="human_edit",
+                draft_markdown=_complete_markdown("useful", 2800),
+            )
+        )
+        db.commit()
+
+        result = run_qa(db, db.get(ArticleJob, job["id"]), stage="initial")
+        assert result["status"] == "QA failed"
+        report = db.query(QaReport).filter(QaReport.article_job_id == job["id"]).order_by(QaReport.id.desc()).first()
+        assert report is not None
+        assert report.findings_json["maximum_word_count"] == 2200
+        assert report.findings_json["maximum_word_count_passed"] is False
+        assert "too broad" in " ".join(report.findings_json["failed_checks"])
+    finally:
+        db.close()
+
+
+def test_build_context_exposes_cluster_target_as_primary_internal_cta():
+    client = TestClient(app)
+    job = _create_job(client, post_type="informational_blog")
+    db = SessionLocal()
+    try:
+        cluster = ContentCluster(
+            name=f"Mould Control {job['id']}",
+            description="Support content for mould prevention.",
+            target_url_slug="best-dehumidifier-for-mould-australia",
+            notes="Main mould money page.",
+        )
+        db.add(cluster)
+        db.commit()
+        db.refresh(cluster)
+        row = db.get(ArticleJob, job["id"])
+        row.cluster_id = cluster.id
+        db.add(row)
+        _seed_brief(db, job["id"])
+        db.commit()
+
+        context = ad._build_context(db, row)
+
+        assert context["internal_link_targets"]["primary_cta"]["url"] == "/best-dehumidifier-for-mould-australia/"
+        assert context["internal_link_targets"]["primary_cta"]["source"] == "content_cluster.target_url_slug"
+        assert context["internal_link_targets"]["cluster"]["name"] == f"Mould Control {job['id']}"
     finally:
         db.close()

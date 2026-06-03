@@ -1227,6 +1227,7 @@ async function uploadArticleToWordPress(articlePath, env) {
     title: article.seo_title || extractH1(article.draft_markdown) || article.slug || 'Article',
     content: finalHtml,
     status: 'draft',
+    comment_status: 'closed',
     slug: article.slug || undefined,
     excerpt: article.excerpt || undefined,
     featured_media: featuredVisual?.metadata.wordpress_media_id || undefined,

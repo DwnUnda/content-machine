@@ -34,6 +34,19 @@ Required and optional block coverage:
 
 Content density rule:
 - Do not reward length by itself.
+- For informational_blog drafts, judge whether the page is a focused support
+  article or a true pillar guide. Direct question/problem keywords should usually
+  be support articles, not broad mega-guides.
+- For support-style informational drafts, add a warning if the article feels
+  over 2,000 words, has too many H2 sections, or covers buyer-guide/rental/cost
+  topics in more depth than the core query needs.
+- For support-style informational drafts, treat excessive breadth as a failed
+  check when it makes the page compete with a money page instead of routing
+  readers toward it.
+- Support-style informational FAQs should usually have 4-6 questions. Warn when
+  the FAQ repeats the body or becomes a second article.
+- If table-like content is flattened as plain text instead of a real table,
+  flag it as a formatting issue.
 - For commercial drafts, flag repeated advice across top picks, product reviews,
   buyer guides, mistakes, FAQs and final recommendations.
 - Add a warning if a commercial draft feels padded, if the FAQ is oversized, or

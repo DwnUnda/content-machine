@@ -119,3 +119,44 @@ def test_renderer_decodes_html_entities_in_table_of_contents():
     assert "you-039-re" not in toc
     assert 'href="#if-you-re-renting-what-you-can-and-can-t-do"' in html
     assert 'id="if-you-re-renting-what-you-can-and-can-t-do"' in html
+
+
+def test_renderer_converts_related_buying_guide_marker():
+    draft = SimpleNamespace(
+        draft_markdown=(
+            "# Does a Dehumidifier Help With Mould?\n\n"
+            "Intro.\n\n"
+            "## Short answer\n\n"
+            "[[RELATEDBUYINGGUIDE|Need a unit for mould control?|See our researched picks for Australian homes.|/best-dehumidifier-for-mould-australia/|View the best dehumidifiers for mould]]\n\n"
+            "A dehumidifier can help prevent mould returning.\n\n"
+            "## Final thoughts\n\n"
+            "Wrap up."
+        ),
+        source_payload_json={},
+    )
+
+    html = render_article_html(draft, "informational_blog")
+
+    assert '<aside class="related-buying-guide">' in html
+    assert 'href="/best-dehumidifier-for-mould-australia/"' in html
+    assert "[[RELATEDBUYINGGUIDE" not in html
+
+
+def test_renderer_drops_related_buying_guide_marker_with_external_url():
+    draft = SimpleNamespace(
+        draft_markdown=(
+            "# Does a Dehumidifier Help With Mould?\n\n"
+            "Intro.\n\n"
+            "## Short answer\n\n"
+            "[[RELATEDBUYINGGUIDE|Title|Description|https://example.com/bad|View guide]]\n\n"
+            "A dehumidifier can help prevent mould returning.\n\n"
+            "## Final thoughts\n\n"
+            "Wrap up."
+        ),
+        source_payload_json={},
+    )
+
+    html = render_article_html(draft, "informational_blog")
+
+    assert '<aside class="related-buying-guide">' not in html
+    assert "https://example.com/bad" not in html
