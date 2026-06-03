@@ -183,6 +183,16 @@ function slugifyHeadingId(value) {
     || 'section';
 }
 
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&#0*39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
 function buildTableOfContentsHtml(items) {
   if (!Array.isArray(items) || !items.length) {
     return '';
@@ -229,7 +239,7 @@ function addTableOfContents(html, postType = 'informational_blog') {
   const seenIds = new Set();
   let firstHeadingIndex = -1;
   const updated = html.replace(h2Regex, (match, attrs, inner, offset) => {
-    const text = inner.replace(/<[^>]+>/g, '').trim();
+    const text = decodeHtmlEntities(inner.replace(/<[^>]+>/g, '').trim());
     if (!text) {
       return match;
     }

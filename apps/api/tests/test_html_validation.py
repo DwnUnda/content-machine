@@ -1,9 +1,10 @@
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app.services.html_validation import validate_html_structure
+from app.services.html_validation import render_article_html, validate_html_structure
 
 
 VALID_BEST_X_HTML = """
@@ -93,3 +94,28 @@ def test_validation_catches_commercial_navigation_before_comparison():
 
     failed = {check.key for check in result.checks if not check.passed}
     assert "commercial_above_fold_order" in failed
+
+
+def test_renderer_decodes_html_entities_in_table_of_contents():
+    draft = SimpleNamespace(
+        draft_markdown=(
+            "# Does a Dehumidifier Help With Mould?\n\n"
+            "Intro.\n\n"
+            "## If you're renting: what you can and can't do\n\n"
+            "Tenant guidance.\n\n"
+            "## Final thoughts\n\n"
+            "Wrap up."
+        ),
+        source_payload_json={},
+    )
+
+    html = render_article_html(
+        draft,
+        "informational_blog",
+    )
+    toc = html[html.index('<nav class="hdl-toc"') : html.index("</nav>") + len("</nav>")]
+
+    assert "&amp;#039;" not in toc
+    assert "you-039-re" not in toc
+    assert 'href="#if-you-re-renting-what-you-can-and-can-t-do"' in html
+    assert 'id="if-you-re-renting-what-you-can-and-can-t-do"' in html
