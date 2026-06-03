@@ -12,7 +12,7 @@ VALID_BEST_X_HTML = """
 <div class="hdl-article-content">
 <article class="best-x-for-y-post">
   <section class="money-hero">
-    <h1>Best dehumidifier for mould</h1>
+    <p>Short buying-intent intro.</p>
     <div class="top-picks-grid">
       <div class="product-card featured"><h3>Pick One</h3><a class="read-review-link" href="#pick-one-review">Read review</a></div>
       <div class="product-card featured"><h3>Pick Two</h3><a class="read-review-link" href="#pick-two-review">Read review</a></div>
@@ -25,6 +25,7 @@ VALID_BEST_X_HTML = """
       <table class="hdl-table"><thead><tr><th>Model</th></tr></thead><tbody><tr><td>Pick One</td></tr></tbody></table>
     </div>
   </section>
+  <nav class="hdl-jump-links" aria-label="Quick article navigation"><a href="#top-picks">Top picks</a><a href="#comparison">Quick comparison</a><a href="#faq">FAQ</a></nav>
   <section class="hdl-product-reviews">
     <article class="hdl-product-review-card" id="pick-one-review"><h3>Pick One</h3></article>
     <article class="hdl-product-review-card" id="pick-two-review"><h3>Pick Two</h3></article>
@@ -72,3 +73,23 @@ def test_validation_catches_broken_read_review_anchor():
 
     failed = {check.key for check in result.checks if not check.passed}
     assert "review_anchor_targets" in failed
+
+
+def test_validation_catches_duplicate_body_h1():
+    html = VALID_BEST_X_HTML.replace("<p>Short buying-intent intro.</p>", "<h1>Duplicate title</h1><p>Short buying-intent intro.</p>")
+
+    result = validate_html_structure(html, post_type="best_x_for_y", expect_wordpress_block=True)
+
+    failed = {check.key for check in result.checks if not check.passed}
+    assert "no_body_h1" in failed
+
+
+def test_validation_catches_commercial_navigation_before_comparison():
+    nav = '<nav class="hdl-jump-links" aria-label="Quick article navigation"><a href="#top-picks">Top picks</a><a href="#comparison">Quick comparison</a><a href="#faq">FAQ</a></nav>'
+    html = VALID_BEST_X_HTML.replace(nav, "")
+    html = html.replace('<div class="top-picks-grid">', f"{nav}\n    <div class=\"top-picks-grid\">", 1)
+
+    result = validate_html_structure(html, post_type="best_x_for_y", expect_wordpress_block=True)
+
+    failed = {check.key for check in result.checks if not check.passed}
+    assert "commercial_above_fold_order" in failed

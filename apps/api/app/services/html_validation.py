@@ -83,6 +83,11 @@ def _has_table_rows(html: str) -> bool:
     return bool(re.search(r"<table\b[\s\S]*?<tbody\b[\s\S]*?<tr\b", html, flags=re.IGNORECASE))
 
 
+def _first_index(html: str, patterns: tuple[str, ...]) -> int:
+    indexes = [idx for pattern in patterns if (idx := html.find(pattern)) != -1]
+    return min(indexes) if indexes else -1
+
+
 def _find_html_file(job: ArticleJob, draft: ArticleDraft | None) -> Path | None:
     if not job.local_export_path:
         return None
@@ -173,6 +178,13 @@ def validate_html_structure(html: str, *, post_type: str, expect_wordpress_block
         not re.search(r"(^|\n)\s{0,3}#{1,6}\s+\S|\*\*[^*]+\*\*|```", body_without_style),
         "No markdown syntax leaked into rendered HTML." if not re.search(r"(^|\n)\s{0,3}#{1,6}\s+\S|\*\*[^*]+\*\*|```", body_without_style) else "Raw markdown syntax appears in rendered HTML.",
     ))
+    has_body_h1 = bool(re.search(r"<h1\b", body_without_style, flags=re.IGNORECASE))
+    checks.append(_check(
+        "no_body_h1",
+        "No body H1",
+        not has_body_h1,
+        "Article body does not include an H1; the WordPress theme supplies the page title." if not has_body_h1 else "Article body includes an H1, which can duplicate the WordPress page title.",
+    ))
     checks.append(_check(
         "no_malformed_wrappers",
         "No malformed wrappers",
@@ -217,6 +229,18 @@ def validate_html_structure(html: str, *, post_type: str, expect_wordpress_block
             "Comparison table",
             'class="hdl-table"' in body and _has_table_rows(body),
             "Comparison table with body rows is present." if 'class="hdl-table"' in body and _has_table_rows(body) else "Missing comparison table or table rows.",
+        ))
+
+    if post_type in {PostType.MONEY_POST.value, PostType.BEST_X_FOR_Y.value}:
+        top_picks_index = _first_index(body, ('class="top-picks-grid"', 'id="top-picks"'))
+        comparison_index = _first_index(body, ('class="hdl-comparison-module"', 'class="comparison-section"', 'id="comparison"'))
+        jump_links_index = _first_index(body, ('class="hdl-jump-links"', 'class="jump-links"'))
+        order_ok = top_picks_index != -1 and comparison_index != -1 and jump_links_index != -1 and top_picks_index < comparison_index < jump_links_index
+        checks.append(_check(
+            "commercial_above_fold_order",
+            "Commercial above-fold order",
+            order_ok,
+            "Top picks, comparison table, then jump links appear in the expected order." if order_ok else "Expected top picks first, comparison table second, and jump links after the comparison table.",
         ))
 
     review_targets = _href_anchors(body, "read-review-link")
