@@ -1,0 +1,14 @@
+{
+  "name": "home-dry-lab-content-machine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Content generation and export pipeline for Home Dry Lab",
+  "scripts": {
+    "export:html": "node scripts/export-html.js",
+    "upload:wordpress": "node scripts/upload-wordpress.js",
+    "test:wordpress-html": "node scripts/test-wordpress-html-renderer.js"
+  },
+  "workspaces": [
+    "apps/*"
+  ]
+}

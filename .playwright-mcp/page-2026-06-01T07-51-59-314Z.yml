@@ -1,0 +1,26 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: Local-first editorial ops
+        - generic [ref=e6]: Home Dry Lab Content Machine
+        - paragraph [ref=e7]: Research-backed Australian content drafting, with draft-only WordPress export safeguards.
+      - navigation [ref=e8]:
+        - link "Dashboard" [ref=e9] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Articles" [ref=e10] [cursor=pointer]:
+          - /url: /articles
+        - link "Products" [ref=e11] [cursor=pointer]:
+          - /url: /products
+        - link "Clusters" [ref=e12] [cursor=pointer]:
+          - /url: /clusters
+        - link "Sources" [ref=e13] [cursor=pointer]:
+          - /url: /sources
+        - link "Settings" [ref=e14] [cursor=pointer]:
+          - /url: /settings
+        - link "Logs" [ref=e15] [cursor=pointer]:
+          - /url: /logs
+    - main [ref=e16]:
+      - generic [ref=e17]: Loading article...
+  - button "Open Next.js Dev Tools" [ref=e23] [cursor=pointer]:
+    - img [ref=e24]
