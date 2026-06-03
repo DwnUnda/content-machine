@@ -206,7 +206,24 @@ function stripLeadingRank(text) {
   return String(text || '').replace(/^\s*\d+\.\s*/, '').trim();
 }
 
-function addTableOfContents(html) {
+function findComparisonSectionCloseIndex(html) {
+  const patterns = [
+    '<section class="comparison-section"',
+    '<section class="hdl-comparison-module"',
+  ];
+  for (const pattern of patterns) {
+    const sectionIndex = html.indexOf(pattern);
+    if (sectionIndex !== -1) {
+      const closeIndex = html.indexOf('</section>', sectionIndex);
+      if (closeIndex !== -1) {
+        return closeIndex + '</section>'.length;
+      }
+    }
+  }
+  return -1;
+}
+
+function addTableOfContents(html, postType = 'informational_blog') {
   const h2Regex = /<h2([^>]*)>([\s\S]*?)<\/h2>/gi;
   const items = [];
   const seenIds = new Set();
@@ -239,6 +256,12 @@ function addTableOfContents(html) {
   }
 
   let insertIndex = firstHeadingIndex;
+  if (postType === 'money_post' || postType === 'best_x_for_y') {
+    const comparisonCloseIndex = findComparisonSectionCloseIndex(updated);
+    if (comparisonCloseIndex !== -1) {
+      insertIndex = comparisonCloseIndex;
+    }
+  }
   const quickAnswerIndex = updated.lastIndexOf('<section class="hdl-quick-answer">', firstHeadingIndex);
   if (quickAnswerIndex !== -1) {
     const quickAnswerCloseBeforeHeading = updated.indexOf('</section>', quickAnswerIndex);
@@ -427,6 +450,13 @@ function addJumpLinks(html, postType = 'informational_blog') {
     '</nav>',
   ].join('\n');
 
+  if (postType === 'money_post' || postType === 'best_x_for_y') {
+    const comparisonCloseIndex = findComparisonSectionCloseIndex(html);
+    if (comparisonCloseIndex !== -1) {
+      return `${html.slice(0, comparisonCloseIndex)}\n${navHtml}\n${html.slice(comparisonCloseIndex)}`;
+    }
+  }
+
   const tocIndex = html.indexOf('<nav class="hdl-toc"');
   if (tocIndex !== -1) {
     const tocClose = html.indexOf('</nav>', tocIndex);
@@ -601,7 +631,7 @@ function renderArticleHtml(content, options = {}) {
       wrapContainer: true,
       wrapSpecialSections: true,
       warnings: [],
-    }), postType, contentModules)),
+    }), postType, contentModules), postType),
     postType,
   );
   return wordpressBlocks ? wrapGutenbergHtmlBlock(html) : html;

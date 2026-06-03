@@ -150,10 +150,6 @@ Required HTML structure:
     [H1]
     [SHORT_BUYER_FOCUSED_INTRO — max 100 words; orient the reader to the buying
      decision, not a generic product category intro]
-    <nav class="jump-links" aria-label="Quick article navigation">
-      [SHORT_JUMP_LINKS — 4 to 5 anchors pointing to top picks, quick comparison,
-       full reviews, buying guide, FAQ]
-    </nav>
     <div class="top-picks-grid">
       [TOP_PICK_CARDS — 2–3 product cards for the top picks]
     </div>
@@ -163,6 +159,13 @@ Required HTML structure:
     <div class="table-wrap">
       [COMMERCIAL_COMPARISON_TABLE — see table rules below]
     </div>
+  </section>
+
+  <section class="jump-links-section">
+    <nav class="jump-links" aria-label="Quick article navigation">
+      [SHORT_JUMP_LINKS — 4 to 5 anchors pointing to top picks, quick comparison,
+       full reviews, buying guide, FAQ]
+    </nav>
   </section>
 
   <section class="methodology-box">
@@ -215,8 +218,10 @@ Above-the-fold rules:
 - Do not start with a long generic intro.
 - The first 400 words must help the reader choose — not educate them about the
   product category in general.
-- Add a short jump-links nav before the top-picks grid.
 - Place top-pick cards immediately after the short intro.
+- Put the comparison table before the jump-links nav so the buying answer lands
+  before the page turns into navigation.
+- Keep the jump-links nav compact and below the comparison table.
 
 Top-pick card structure:
 <div class="product-card featured">

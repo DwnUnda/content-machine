@@ -165,9 +165,9 @@ class DraftPayload:
 COMMERCIAL_MODULE_BLUEPRINTS = {
     PostType.MONEY_POST.value: [
         ("top_picks", ("Top picks",)),
+        ("comparison", ("Quick comparison",)),
         ("jump_links", ("Jump links",)),
         ("decision_grid", ("Which one should you buy?", "Which one suits your situation?")),
-        ("comparison", ("Quick comparison",)),
         ("methodology", ("How we chose these products",)),
         ("product_reviews", ("Recommended air purifiers for mould — full reviews", "Our top picks")),
         ("buyer_guide", ("How to choose",)),
