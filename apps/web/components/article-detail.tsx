@@ -178,6 +178,18 @@ function getPrimaryWorkflowButtonLabel(state: WorkflowState | null) {
   }
 }
 
+function getRunningWorkflowLabel(run: WorkflowRun | null): string {
+  const currentStep = run?.current_step;
+  if (!currentStep) return "workflow";
+
+  const stepLabel = run?.steps.find((step) => step.step_key === currentStep)?.step_label;
+  if (stepLabel) return stepLabel;
+
+  return currentStep
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function getDraftStatusLabel(article: ArticleJobDetail, latestDraft: ArticleDraftRecord | null, draftReadyProducts: number, needsProductCards: boolean) {
   if (needsProductCards && draftReadyProducts < 3) {
     return "Needs Product Data";
@@ -1717,12 +1729,12 @@ export function ArticleDetail({ id }: { id: number }) {
         </div>
         <div className="actions">
           <button
-            className="button"
+            className="button workflow-action-button"
             disabled={loadingAction === "full-draft"}
             onClick={createFullDraft}
             type="button"
           >
-            {loadingAction === "full-draft" ? "Running..." : primaryWorkflowLabel}
+            {loadingAction === "full-draft" ? `Running: ${getRunningWorkflowLabel(latestWorkflowRun)}` : primaryWorkflowLabel}
           </button>
           {localExportUrl ? (
             <button className="button-secondary" onClick={() => window.open(localExportUrl, "_blank")} type="button">

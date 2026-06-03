@@ -240,6 +240,11 @@ textarea {
   color: white;
 }
 
+.workflow-action-button {
+  min-width: 220px;
+  text-align: center;
+}
+
 .button-secondary {
   background: rgba(255, 255, 255, 0.75);
   color: var(--text);
