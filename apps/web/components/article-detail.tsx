@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { api } from "@/lib/api";
+import { formatLocalDateTime } from "@/lib/format";
 import { getMinProductsForPostType, getPostTypeLabel, isProductGated } from "@/lib/post-types";
 import { AppLog, ArticleBrief, ArticleDraftRecord, ArticleJobDetail, ArticleJobProduct, CompetitorPage, ContentModuleRecord, KeywordResearchRow, ProductCandidate, ProductRetailerUrl, PublishReadiness, QaReport, SerpAnalysisReport, SerpResult, WorkflowResult, WorkflowRun, WorkflowState } from "@/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -911,7 +912,7 @@ export function ArticleDetail({ id }: { id: number }) {
               <div>
                 <strong>Stored SERP results</strong>
                 <div className="muted">
-                  Last run: {serpResults.length ? new Date(serpResults[0].created_at).toLocaleString() : "Not run yet"}
+                  Last run: {serpResults.length ? formatLocalDateTime(serpResults[0].created_at) : "Not run yet"}
                 </div>
               </div>
               <button className="button" disabled={loadingAction === "serp-research"} onClick={runSerpResearch} type="button">
@@ -955,7 +956,7 @@ export function ArticleDetail({ id }: { id: number }) {
               <div>
                 <strong>Stored keyword research</strong>
                 <div className="muted">
-                  Last run: {keywordResearch.length ? new Date(keywordResearch[0].created_at).toLocaleString() : "Not run yet"}
+                  Last run: {keywordResearch.length ? formatLocalDateTime(keywordResearch[0].created_at) : "Not run yet"}
                 </div>
               </div>
               <button className="button" disabled={loadingAction === "keyword-research"} onClick={runKeywordResearch} type="button">
@@ -1369,7 +1370,7 @@ export function ArticleDetail({ id }: { id: number }) {
               <div className="toolbar">
                 <div>
                   <strong>Reddit feedback research</strong>
-                  <div className="muted">{new Date(redditLog.created_at).toLocaleString()}</div>
+                  <div className="muted">{formatLocalDateTime(redditLog.created_at)}</div>
                 </div>
                 <span className="muted">{qualified.length} qualified · {rejected.length} rejected</span>
               </div>
@@ -1443,7 +1444,7 @@ export function ArticleDetail({ id }: { id: number }) {
               <div>
                 <strong>Research brief</strong>
                 <div className="muted">
-                  Latest version: {latestBrief ? `v${latestBrief.version} from ${new Date(latestBrief.updated_at).toLocaleString()}` : "Not generated yet"}
+                  Latest version: {latestBrief ? `v${latestBrief.version} from ${formatLocalDateTime(latestBrief.updated_at)}` : "Not generated yet"}
                 </div>
               </div>
               <div className="actions">
@@ -1693,7 +1694,7 @@ export function ArticleDetail({ id }: { id: number }) {
               <div className="list-card" key={log.id}>
                 <div className="toolbar">
                   <strong>{log.event_type}</strong>
-                  <span className="muted">{new Date(log.created_at).toLocaleString()}</span>
+                  <span className="muted">{formatLocalDateTime(log.created_at)}</span>
                 </div>
                 <div>{log.message}</div>
               </div>
@@ -1845,7 +1846,7 @@ export function ArticleDetail({ id }: { id: number }) {
             <div className="toolbar">
               <strong>Workflow progress</strong>
               <span className="muted">
-                {workflowRunStatusLabel} · {new Date(latestWorkflowRun.updated_at).toLocaleString()}
+                {workflowRunStatusLabel} · {formatLocalDateTime(latestWorkflowRun.updated_at)}
               </span>
             </div>
             <div className="muted">

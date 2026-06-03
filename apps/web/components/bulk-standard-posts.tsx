@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
+import { formatLocalDateTime } from "@/lib/format";
 import { StandardPostBatch, StandardPostBatchDetail, StandardPostBatchItem } from "@/types";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -148,7 +149,7 @@ export function BulkStandardPosts() {
                     {batch.counts.complete}/{batch.counts.total} done
                     {batch.counts.failed ? `, ${batch.counts.failed} failed` : ""}
                   </td>
-                  <td>{new Date(batch.created_at).toLocaleString()}</td>
+                  <td>{formatLocalDateTime(batch.created_at)}</td>
                   <td>
                     <button className="button" onClick={() => loadSelected(batch.id)}>
                       Open
@@ -234,8 +235,8 @@ export function BulkStandardPosts() {
                     <StatusBadge status={item.status} /> <span className="muted">{itemActionLabel(item)}</span>
                   </td>
                   <td className="muted">{item.article_folder ?? "—"}</td>
-                  <td>{new Date(item.created_at).toLocaleString()}</td>
-                  <td>{item.completed_at ? new Date(item.completed_at).toLocaleString() : "—"}</td>
+                  <td>{formatLocalDateTime(item.created_at)}</td>
+                  <td>{formatLocalDateTime(item.completed_at)}</td>
                   <td>
                     {(item.status === "failed" || item.status === "skipped" || item.status === "cancelled") ? (
                       <button

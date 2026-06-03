@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { formatLocalDateTime } from "@/lib/format";
 import { getPostTypeLabel } from "@/lib/post-types";
 import { ArticleJob } from "@/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -81,7 +82,7 @@ export function ArticleList({ compact = false }: { compact?: boolean }) {
             <td>
               <StatusBadge status={item.status} />
             </td>
-            <td>{new Date(item.updated_at).toLocaleString()}</td>
+            <td>{formatLocalDateTime(item.updated_at)}</td>
             <td>
               <button
                 className="button-link"
@@ -98,4 +99,3 @@ export function ArticleList({ compact = false }: { compact?: boolean }) {
     </table>
   );
 }
-

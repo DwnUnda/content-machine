@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { formatLocalDateTime } from "@/lib/format";
 import { AppLog } from "@/types";
 
 
@@ -23,7 +24,7 @@ export function LogsPanel() {
         <div className="list-card" key={log.id}>
           <div className="toolbar">
             <strong>{log.event_type}</strong>
-            <span className="muted">{new Date(log.created_at).toLocaleString()}</span>
+            <span className="muted">{formatLocalDateTime(log.created_at)}</span>
           </div>
           <div>{log.message}</div>
           {log.article_job_id ? <div className="muted">Article job #{log.article_job_id}</div> : null}
