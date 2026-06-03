@@ -74,18 +74,24 @@ Do NOT invent affiliate URLs. Use this placeholder for every CTA button:
 If a product URL is present in the product data, use that URL instead of "#".
 
 Commercial content-density rules:
-- For money_post and best_x_for_y drafts, aim for roughly 3,200-4,500 words
-  unless the brief clearly requires a deeper guide.
+- For money_post and best_x_for_y drafts, aim for roughly 4,000-5,200 words.
+  Do not exceed about 5,800 words unless the brief clearly requires a deeper
+  guide.
+- For product_comparison and single_product_review drafts, keep the page
+  commercially complete but tighter than a broad buyer guide.
 - The first answer, top picks, comparison table and use-case split carry the
   buyer intent. Supporting sections must add new decision value, not restate
   the same recommendation logic.
-- Product review blocks should be concise: about 250-450 words per product,
-  with only the evidence, drawbacks and fit notes that change the buying
-  decision.
+- Product review blocks inside money_post and best_x_for_y drafts should be
+  concise: about 350-500 words per product, excluding spec tables. Use only the
+  evidence, drawbacks and fit notes that change the buying decision.
 - FAQ sections should use 6-8 high-intent questions with short answers. Do not
   repeat the buyer guide or product reviews.
 - Final recommendations should be 150-250 words and should not recap every
   product in full.
+- Do not run more than 250-350 words of prose, or more than 3 standard
+  paragraphs, without a scannable module such as a table, list, spec box,
+  pros/cons block, decision box, CTA box, callout or product image placeholder.
 - If a section adds no new decision-making value, merge it, shorten it or omit
   it.
 """

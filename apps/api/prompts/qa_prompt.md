@@ -39,6 +39,15 @@ Content density rule:
 - Add a warning if a commercial draft feels padded, if the FAQ is oversized, or
   if product reviews repeat comparison-table points without adding useful buyer
   evidence, drawbacks or fit notes.
+- Add a warning if a money_post or best_x_for_y draft exceeds about 5,800 words
+  without a clear brief-driven reason.
+- Add a warning if commercial product review sections feel like mini blog posts
+  rather than concise buying decisions.
+- Add a warning if the final verdict is long enough to re-explain the article
+  instead of giving a short decision summary.
+- Add a warning if the draft has long uninterrupted prose blocks with no table,
+  list, spec box, pros/cons block, decision box, CTA box, callout, image or
+  product placeholder.
 - Treat excessive repetition as a failed check when it makes the draft harder to
   use, buries recommendations, or creates a generic affiliate-article feel.
 - Prefer concise sections with clear decision value over exhaustive coverage.
