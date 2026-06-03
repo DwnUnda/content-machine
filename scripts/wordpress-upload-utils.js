@@ -428,6 +428,12 @@ function wrapFaqSection(html) {
   }).trim();
 }
 
+function stripFirstHeadingTag(html, level = 1) {
+  const input = String(html || '');
+  const regex = new RegExp(`<h${level}([^>]*)>[\\s\\S]*?<\\/h${level}>`, 'i');
+  return input.replace(regex, '').replace(/^\s*\n+/g, '').trim();
+}
+
 function makeWordPressRequest(method, requestPath, data, baseUrl, username, appPassword, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const base = new URL(baseUrl);
@@ -482,6 +488,7 @@ function makeWordPressRequest(method, requestPath, data, baseUrl, username, appP
 module.exports = {
   escapeHtml,
   slugify,
+  stripFirstHeadingTag,
   markdownToHtml,
   makeWordPressRequest,
   buildScopedStyleBlock,

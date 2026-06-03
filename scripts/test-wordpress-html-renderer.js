@@ -59,6 +59,7 @@ const rendered = renderArticleHtml(sourceHtml, {
 
 assert.match(rendered, /^<!-- wp:html -->/);
 assert.match(rendered, /<!-- \/wp:html -->$/);
+assert.doesNotMatch(rendered, /<h1\b/i);
 assert.match(rendered, /<table class="hdl-table">/);
 assert.match(rendered, /<div class="product-card featured">/);
 assert.match(rendered, /data-product="Ausclimate Large 35L Dehumidifier"/);

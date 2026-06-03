@@ -1,4 +1,4 @@
-const { buildScopedStyleBlock, markdownToHtml, escapeHtml } = require('./wordpress-upload-utils');
+const { buildScopedStyleBlock, markdownToHtml, escapeHtml, stripFirstHeadingTag } = require('./wordpress-upload-utils');
 
 const RENDER_PROFILES = {
   informational_blog: {
@@ -591,7 +591,7 @@ function renderArticleHtml(content, options = {}) {
   const wordpressBlocks = Boolean(options.wordpressBlocks);
   const body = String(content || '');
   if (isHtmlContent(body)) {
-    const html = `${buildScopedStyleBlock()}\n<div class="hdl-article-content">\n${normalizeHtmlContent(body)}\n</div>`;
+    const html = `${buildScopedStyleBlock()}\n<div class="hdl-article-content">\n${stripFirstHeadingTag(normalizeHtmlContent(body))}\n</div>`;
     return wordpressBlocks ? wrapGutenbergHtmlBlock(html) : html;
   }
   const html = addJumpLinks(
