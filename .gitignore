@@ -10,6 +10,7 @@
 *.pyc
 *.pyo
 *.pyd
+*.tsbuildinfo
 __pycache__/
 .pytest_cache/
 .mypy_cache/
