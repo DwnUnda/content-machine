@@ -135,6 +135,21 @@ def start_batch(db: Session, batch: StandardPostBatch) -> bool:
         return True
 
 
+def maybe_resume_recovered_batch(db: Session, batch: StandardPostBatch) -> bool:
+    """Restart a previously-running queue after stale-state recovery."""
+    if batch.status != "pending":
+        return False
+    pending_count = db.scalar(
+        select(func.count(StandardPostBatchItem.id)).where(
+            StandardPostBatchItem.batch_id == batch.id,
+            StandardPostBatchItem.status == "pending",
+        )
+    )
+    if not pending_count:
+        return False
+    return start_batch(db, batch)
+
+
 def _run_batch_worker(batch_id: int) -> None:
     """Background worker. Owns its own DB session (SQLite check_same_thread=False)."""
     db = SessionLocal()
@@ -301,7 +316,7 @@ def reconcile_stale_running_items(db: Session, batch: StandardPostBatch) -> bool
             )
             if pending_count:
                 batch.status = "pending"
-                batch.summary_message = "Queue recovered after interruption. Click Start to continue pending items."
+                batch.summary_message = "Queue recovered after interruption. Continuing pending items."
                 db.add(batch)
                 db.commit()
                 db.refresh(batch)
@@ -387,7 +402,7 @@ def reconcile_stale_running_items(db: Session, batch: StandardPostBatch) -> bool
     )
     if not running_count and pending_count and not has_active_worker:
         batch.status = "pending"
-        batch.summary_message = "Queue recovered after interruption. Click Start to continue pending items."
+        batch.summary_message = "Queue recovered after interruption. Continuing pending items."
         db.add(batch)
     db.commit()
     db.refresh(batch)

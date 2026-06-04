@@ -11,7 +11,7 @@ from app.main import app
 from app.models.entities import ArticleJob, ArticleJobStatus, StandardPostBatch, StandardPostBatchItem, WorkflowRun
 
 
-def test_batch_detail_recovers_completed_stale_running_item():
+def test_batch_detail_recovers_completed_stale_running_item_and_resumes(monkeypatch):
     client = TestClient(app)
 
     old_time = datetime.utcnow() - timedelta(minutes=30)
@@ -63,12 +63,21 @@ def test_batch_detail_recovers_completed_stale_running_item():
         db.commit()
         batch_id = batch.id
 
+    def fake_resume(db, batch):  # noqa: ANN001
+        batch.status = "running"
+        batch.summary_message = "Queue started."
+        db.add(batch)
+        db.commit()
+        return True
+
+    monkeypatch.setattr("app.api.routes.standard_post_batches.standard_post_queue.maybe_resume_recovered_batch", fake_resume)
+
     response = client.get(f"/api/standard-post-batches/{batch_id}")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "pending"
-    assert payload["summary_message"] == "Queue recovered after interruption. Click Start to continue pending items."
+    assert payload["status"] == "running"
+    assert payload["summary_message"] == "Queue started."
     assert payload["counts"]["complete"] == 1
     assert payload["counts"]["pending"] == 1
     first = payload["items"][0]

@@ -38,11 +38,14 @@ def _counts(batch: StandardPostBatch) -> StandardPostBatchCounts:
 
 
 def _summary(db: Session, batch: StandardPostBatch) -> StandardPostBatchSummary:
-    if batch.status == "running" and not standard_post_queue.is_batch_running(batch.id):
+    was_running = batch.status == "running"
+    if was_running and not standard_post_queue.is_batch_running(batch.id):
         # Recover rows left running after a backend restart or worker interruption
         # before presenting counts to the UI.
         standard_post_queue.reconcile_stale_running_items(db, batch)
         db.refresh(batch)
+        if standard_post_queue.maybe_resume_recovered_batch(db, batch):
+            db.refresh(batch)
     base = StandardPostBatchSummary.model_validate(batch)
     base.counts = _counts(batch)
     base.is_running = standard_post_queue.is_batch_running(batch.id)
@@ -50,9 +53,12 @@ def _summary(db: Session, batch: StandardPostBatch) -> StandardPostBatchSummary:
 
 
 def _detail(db: Session, batch: StandardPostBatch) -> StandardPostBatchDetail:
-    if batch.status == "running" and not standard_post_queue.is_batch_running(batch.id):
+    was_running = batch.status == "running"
+    if was_running and not standard_post_queue.is_batch_running(batch.id):
         standard_post_queue.reconcile_stale_running_items(db, batch)
         db.refresh(batch)
+        if standard_post_queue.maybe_resume_recovered_batch(db, batch):
+            db.refresh(batch)
     detail = StandardPostBatchDetail.model_validate(batch)
     detail.counts = _counts(batch)
     detail.is_running = standard_post_queue.is_batch_running(batch.id)
