@@ -7,9 +7,16 @@ const localDateTimeOptions: Intl.DateTimeFormatOptions = {
   hour12: false,
 };
 
+function parseApiDateTime(value: string): Date {
+  const trimmed = value.trim();
+  const hasExplicitTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  const normalized = hasExplicitTimezone ? trimmed : `${trimmed}Z`;
+  return new Date(normalized);
+}
+
 export function formatLocalDateTime(value?: string | null): string {
   if (!value) return "—";
-  const date = new Date(value);
+  const date = parseApiDateTime(value);
   if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-AU", localDateTimeOptions).format(date);
 }
