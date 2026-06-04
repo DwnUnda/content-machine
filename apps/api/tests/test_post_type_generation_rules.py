@@ -26,8 +26,9 @@ def test_informational_blog_rules_include_support_article_guardrails():
     rules = get_post_type_generation_rules("informational_blog")
     assert "support article" in rules
     assert "1,200-2,000 words" in rules
-    assert "4-6 questions max" in rules
+    assert "4-5 questions max" in rules
     assert "[[RELATEDBUYINGGUIDE|" in rules
+    assert "do not create standalone sections for" in rules
 
 
 def test_single_product_review_contains_article_class():

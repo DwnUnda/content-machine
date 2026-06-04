@@ -28,6 +28,13 @@ intent and the blocks it should contain. You guide structure and enrichment only
 - Base everything on the supplied research. If something is unknown, leave the
   relevant array empty rather than guessing.
 - Australian English and Australian context where relevant.
+- For `informational_blog` direct-question keywords (`does`, `will`, `can`,
+  `should`, `what`, `when`, `how`), classify the page as a focused support
+  article unless the user or brief explicitly asks for a buyer guide or pillar
+  guide. Product relevance does not automatically make the article commercial.
+- For those support articles, do not make running-cost, rental, climate-zone,
+  sizing, or buying-guide blocks required unless that topic is the primary
+  keyword intent. Put them in `optional_blocks` or omit them.
 
 ## Allowed value-block types
 

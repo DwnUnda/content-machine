@@ -75,9 +75,9 @@ MINIMUM_WORD_COUNTS = {
 }
 INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS = 2200
 INFORMATIONAL_SUPPORT_HARD_MAX_WORDS = 2700
-INFORMATIONAL_SUPPORT_MAX_H2S = 9
+INFORMATIONAL_SUPPORT_MAX_H2S = 8
 INFORMATIONAL_SUPPORT_HARD_MAX_H2S = 12
-INFORMATIONAL_SUPPORT_MAX_FAQS = 6
+INFORMATIONAL_SUPPORT_MAX_FAQS = 5
 
 
 def _draft_max_output_tokens(job: ArticleJob) -> int:
@@ -265,6 +265,19 @@ def _count_h2_headings(value: str | None) -> int:
     return markdown_h2s + html_h2s
 
 
+def _h2_headings(value: str | None) -> list[str]:
+    text = value or ""
+    headings = re.findall(r"(?m)^##\s+(.+?)\s*$", text)
+    headings.extend(re.findall(r"(?is)<h2[^>]*>\s*(.*?)\s*</h2>", text))
+    cleaned: list[str] = []
+    for heading in headings:
+        plain = re.sub(r"<[^>]+>", "", heading)
+        plain = re.sub(r"\s+", " ", plain).strip()
+        if plain:
+            cleaned.append(plain)
+    return cleaned
+
+
 def _count_faq_questions(value: str | None) -> int:
     text = value or ""
     faq_match = re.search(
@@ -278,6 +291,29 @@ def _count_faq_questions(value: str | None) -> int:
     if question_headings:
         return question_headings
     return len(re.findall(r"\?", faq_body))
+
+
+def _is_direct_question_keyword(value: str | None) -> bool:
+    text = (value or "").strip().lower()
+    return bool(
+        re.match(r"^(does|do|will|can|should|is|are|what|when|how|why)\b", text)
+        or text.endswith("?")
+    )
+
+
+def _heading_matches_keyword_intent(heading: str, keyword: str) -> bool:
+    heading_l = heading.lower()
+    keyword_terms = set(re.findall(r"[a-z0-9]+", (keyword or "").lower()))
+    intent_groups = (
+        {"cost", "costs", "running", "electricity", "power"},
+        {"renter", "renters", "rental", "landlord", "tenant"},
+        {"climate", "seasonal", "region", "australian"},
+        {"buy", "buying", "choose", "look", "sizing", "size", "capacity"},
+    )
+    for terms in intent_groups:
+        if any(term in heading_l for term in terms):
+            return bool(keyword_terms.intersection(terms))
+    return True
 
 
 def _is_explicit_pillar_request(context: dict) -> bool:
@@ -328,8 +364,12 @@ def _apply_informational_density_guardrails(
         return failed_checks, warnings, fix_instructions, score, passed, None, None
 
     h2_count = _count_h2_headings(draft_markdown)
+    h2_headings = _h2_headings(draft_markdown)
     faq_count = _count_faq_questions(draft_markdown)
     max_word_count = INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS
+    article = context.get("article_job") or {}
+    keyword = str(article.get("primary_keyword") or article.get("title") or "")
+    is_direct_question = _is_direct_question_keyword(keyword)
 
     if word_count > INFORMATIONAL_SUPPORT_SOFT_MAX_WORDS:
         warnings = [
@@ -357,13 +397,19 @@ def _apply_informational_density_guardrails(
     if h2_count > INFORMATIONAL_SUPPORT_MAX_H2S:
         warnings = [
             *warnings,
-            f"Support-style informational article has {h2_count} H2 sections. Merge related sections and aim for 6-9 H2s.",
+            f"Support-style informational article has {h2_count} H2 sections. Merge related sections and aim for 5-8 H2s.",
         ]
         fix_instructions = [*fix_instructions, "Merge overlapping informational sections so the article reads like a focused support post, not a pillar guide."]
-    if h2_count >= INFORMATIONAL_SUPPORT_HARD_MAX_H2S:
         failed_checks = [
             *failed_checks,
             f"Support-style informational article has too many major sections ({h2_count} H2s).",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+    if h2_count >= INFORMATIONAL_SUPPORT_HARD_MAX_H2S:
+        failed_checks = [
+            *failed_checks,
+            f"Support-style informational article is badly over-sectioned ({h2_count} H2s).",
         ]
         score = min(score, float(threshold - 1))
         passed = False
@@ -371,9 +417,39 @@ def _apply_informational_density_guardrails(
     if faq_count > INFORMATIONAL_SUPPORT_MAX_FAQS:
         warnings = [
             *warnings,
-            f"FAQ is oversized for a support article ({faq_count} questions). Use 4-6 short FAQs.",
+            f"FAQ is oversized for a support article ({faq_count} questions). Use 4-5 short FAQs.",
         ]
-        fix_instructions = [*fix_instructions, "Reduce the FAQ to 4-6 questions that do not repeat the body."]
+        fix_instructions = [*fix_instructions, "Reduce the FAQ to 4-5 questions that do not repeat the body."]
+        failed_checks = [
+            *failed_checks,
+            f"FAQ is too large for a focused support article ({faq_count} questions).",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if is_direct_question:
+        tangent_headings = [
+            heading for heading in h2_headings
+            if not _heading_matches_keyword_intent(heading, keyword)
+        ]
+        if len(tangent_headings) >= 2:
+            failed_checks = [
+                *failed_checks,
+                (
+                    "Direct-question support article has standalone tangent sections that do not match the keyword: "
+                    + ", ".join(tangent_headings[:4])
+                ),
+            ]
+            warnings = [
+                *warnings,
+                "Merge buyer/rental/running-cost/climate tangents into short context notes unless the keyword asks for them.",
+            ]
+            fix_instructions = [
+                *fix_instructions,
+                "Remove or compress standalone buyer/rental/running-cost/climate sections; answer the exact question and route readers onward.",
+            ]
+            score = min(score, float(threshold - 1))
+            passed = False
 
     return failed_checks, warnings, fix_instructions, score, passed, max_word_count, word_count <= max_word_count
 

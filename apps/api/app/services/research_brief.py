@@ -25,6 +25,14 @@ def _slugify(value: str) -> str:
     return slug[:80]
 
 
+def _is_direct_question_keyword(value: str | None) -> bool:
+    text = (value or "").strip().lower()
+    return bool(
+        re.match(r"^(does|do|will|can|should|is|are|what|when|how|why)\b", text)
+        or text.endswith("?")
+    )
+
+
 def _reader_profile(job: ArticleJob) -> str:
     if job.target_audience:
         return job.target_audience
@@ -90,6 +98,12 @@ def _forbidden_claims() -> list[str]:
 
 def _title_options(job: ArticleJob, analysis: CompetitorAnalysisReport | None) -> list[str]:
     keyword = job.primary_keyword.strip()
+    if job.post_type == PostType.INFORMATIONAL_BLOG.value and _is_direct_question_keyword(keyword):
+        return [
+            keyword.title(),
+            f"{keyword.title()}: Short Answer For Australian Homes",
+            f"{keyword.title()} What To Do Next",
+        ]
     options = [
         keyword.title(),
         f"{keyword.title()}: What Actually Suits an Australian Home?",
@@ -101,6 +115,9 @@ def _title_options(job: ArticleJob, analysis: CompetitorAnalysisReport | None) -
 
 
 def _meta_description(job: ArticleJob, analysis: CompetitorAnalysisReport | None) -> str:
+    if job.post_type == PostType.INFORMATIONAL_BLOG.value and _is_direct_question_keyword(job.primary_keyword):
+        text = f"Clear Australian answer to {job.primary_keyword}: what it means, when it matters, and what practical step to take next."
+        return text[:160]
     angle = analysis.recommended_angle if analysis and analysis.recommended_angle else "practical Australian buying advice"
     text = f"Research-backed guide to {job.primary_keyword} with Australian context, product drawbacks, buyer tips, and {angle.lower()}."
     return text[:160]
@@ -142,6 +159,11 @@ def build_research_brief_payload(db: Session, job: ArticleJob) -> dict:
         if len(secondary_keywords) >= 8:
             break
 
+    is_informational_support_question = (
+        job.post_type == PostType.INFORMATIONAL_BLOG.value
+        and _is_direct_question_keyword(job.primary_keyword)
+    )
+
     question_pool = list(analysis.common_questions_json or []) if analysis else []
     if not question_pool:
         seen_questions: set[str] = set()
@@ -173,6 +195,19 @@ def build_research_brief_payload(db: Session, job: ArticleJob) -> dict:
             "Summarise common buyer complaints and who should avoid each option.",
             "Explain running costs and use-case trade-offs in plain English.",
         ]
+    if is_informational_support_question:
+        search_intent = "informational support"
+        recommended_angle = (
+            "Answer the exact question directly as a focused support article. "
+            "Explain when the advice applies, when it does not, and what practical step to take next. "
+            "Do not turn this into a buyer guide."
+        )
+        original_value_points = [
+            "Answer the main question within the first 150 words.",
+            "Explain when a dehumidifier helps and when it will not solve the problem.",
+            "Keep buying, rental, climate, and running-cost notes brief unless the keyword asks for them.",
+        ]
+        question_pool = question_pool[:5]
 
     support_articles = list(analysis.suggested_support_articles_json or []) if analysis else []
     competitor_gaps = list(analysis.competitor_gaps_json or []) if analysis else []
@@ -185,6 +220,16 @@ def build_research_brief_payload(db: Session, job: ArticleJob) -> dict:
     preferred_phrases = _lines(settings.get("content_rules.preferred_phrases", ""))
     australian_spelling = _lines(settings.get("content_rules.australian_spelling_rules", ""))
     required_sections = _required_sections(job, settings)
+    if is_informational_support_question:
+        required_sections = [
+            "short answer",
+            "when it helps",
+            "when it will not help",
+            "what to do next",
+            "when to get professional help if relevant",
+            "FAQ",
+            "final answer",
+        ]
 
     product_requirements: list[str] = []
     product_review_methodology = ""

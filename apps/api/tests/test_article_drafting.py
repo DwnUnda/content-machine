@@ -541,6 +541,53 @@ def test_qa_fails_overlong_support_style_informational_draft(monkeypatch):
         db.close()
 
 
+def test_qa_fails_oversectioned_support_style_informational_draft(monkeypatch):
+    client = TestClient(app)
+    job = _create_job(client, post_type="informational_blog")
+    db = SessionLocal()
+    try:
+        row = db.get(ArticleJob, job["id"])
+        row.title = "Will A Dehumidifier Remove Existing Mould?"
+        row.primary_keyword = "Will A Dehumidifier Remove Existing Mould?"
+        db.add(row)
+        _seed_brief(db, job["id"])
+        openai_payloads = [
+            {"score": 96, "passed": True, "failed_checks": [], "warnings": [], "fix_instructions": [], "manual_override_risk": "low", "summary": "Looks strong."},
+            {"seo_title": "Title", "meta_description": "Meta", "slug": "slug", "excerpt": "Excerpt"},
+        ]
+        monkeypatch.setattr(OpenAIClient, "generate_json", lambda self, **kwargs: openai_payloads.pop(0))  # noqa: ARG005
+
+        draft = "\n\n".join(
+            [
+                "# Will A Dehumidifier Remove Existing Mould?",
+                "Short intro with direct answer.",
+                "## Short answer\nNo. It helps prevent regrowth after cleaning.",
+                "## What a dehumidifier actually does\nIt lowers humidity.",
+                "## Clean the mould first\nClean safely before prevention.",
+                "## Find the moisture source\nFix leaks and damp sources.",
+                "## Australian climate context\nBrief climate note.",
+                "## What to look for if you do buy a dehumidifier\nBrief buying note.",
+                "## Running costs in Australia\nBrief cost note.",
+                "## Renter-specific guidance\nBrief rental note.",
+                "## Frequently asked questions\n**Will it kill mould?**\nNo.\n\n**Can I run it before cleaning?**\nClean first.\n\n**What humidity stops mould?**\nKeep it below 60%.\n\n**Is it worth it?**\nSometimes.\n\n**When should I call a professional?**\nFor large or persistent mould.\n\n**How do I stop it coming back?**\nFix moisture.",
+                "## Final thoughts\nFinal answer.",
+            ]
+        )
+        db.add(ArticleDraft(article_job_id=job["id"], version=1, stage="human_edit", draft_markdown=draft))
+        db.commit()
+
+        result = run_qa(db, db.get(ArticleJob, job["id"]), stage="initial")
+        assert result["status"] == "QA failed"
+        report = db.query(QaReport).filter(QaReport.article_job_id == job["id"]).order_by(QaReport.id.desc()).first()
+        assert report is not None
+        failed = " ".join(str(item) for item in report.findings_json["failed_checks"])
+        assert "too many major sections" in failed
+        assert "standalone tangent sections" in failed
+        assert "FAQ is too large" in failed
+    finally:
+        db.close()
+
+
 def test_build_context_exposes_cluster_target_as_primary_internal_cta():
     client = TestClient(app)
     job = _create_job(client, post_type="informational_blog")

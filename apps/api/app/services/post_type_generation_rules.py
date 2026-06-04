@@ -163,15 +163,20 @@ Support article length and scope:
   1,500-1,800 words.
 - Do not exceed about 2,200 words for a support article unless the user notes,
   SERP intent, or brief explicitly request a comprehensive/pillar guide.
-- Use about 6-9 H2 sections for support articles. If the outline wants more,
+- Use about 5-8 H2 sections for support articles. If the outline wants more,
   merge related sections.
-- FAQ sections in support articles should use 4-6 questions max with short
+- FAQ sections in support articles should use 4-5 questions max with short
   answers.
 - Compress sizing, running-cost, product-choice, rental, seasonal, and buying
   guidance unless those are the primary keyword intent.
 - If buying guidance is relevant, summarise it briefly and link to the related
   buying guide instead of becoming a buyer guide.
 - Avoid repeating the same point across the body, FAQ and conclusion.
+- For yes/no keywords such as "will a dehumidifier remove existing mould" or
+  "does a dehumidifier help with mould", do not create standalone sections for
+  running costs, rental law, climate zones, product sizing, or buying criteria.
+  Mention those only briefly when they directly affect the answer, then route to
+  a related guide when a real internal target exists.
 
 Structure rules:
 - Keep the intro short (2–3 sentences).

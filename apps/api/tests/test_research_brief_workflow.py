@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.entities import ArticleBrief, ArticleDraft, ArticleJob, CompetitorAnalysisReport, CompetitorPage, KeywordResearch, QaReport, SerpResult, WorkflowRun
+from app.services.research_brief import build_research_brief_payload
 from app.services.workflow import get_workflow_state
 
 def _seed_research(article_id: int) -> None:
@@ -98,6 +99,63 @@ def test_generate_research_brief_and_save():
     )
     assert save_response.status_code == 200
     assert save_response.json()["brief_markdown"] == "# Edited brief"
+
+
+def test_research_brief_keeps_direct_question_informational_posts_focused():
+    client = TestClient(app)
+    article = client.post(
+        "/api/article-jobs",
+        json={
+            "title": "Will A Dehumidifier Remove Existing Mould?",
+            "primary_keyword": "Will A Dehumidifier Remove Existing Mould?",
+            "post_type": "informational_blog",
+        },
+    ).json()
+
+    db = SessionLocal()
+    try:
+        db.add(
+            CompetitorAnalysisReport(
+                article_job_id=article["id"],
+                dominant_intent="commercial investigation",
+                competitor_gaps_json=["Few competitors discuss running costs clearly."],
+                australian_context_gaps_json=["Rental suitability is under-covered."],
+                recommended_angle="Build an Australian buyer-first guide that compares mould control, running cost, and rental suitability.",
+                original_value_recommendations_json=[
+                    "Add stronger Australian climate, pricing, and rental context.",
+                    "Add a running cost explainer for Australian households.",
+                    "Add rental-friendly guidance and limitations.",
+                ],
+                common_questions_json=[
+                    "Will running a dehumidifier kill mould?",
+                    "Can I run a dehumidifier while there is mould?",
+                    "What humidity level stops mould?",
+                    "Is it worth it after rain?",
+                    "When should I call a professional?",
+                    "How do I prevent mould coming back?",
+                    "How do I choose a dehumidifier?",
+                ],
+                raw_report_json={"seeded": True},
+            )
+        )
+        db.commit()
+
+        payload = build_research_brief_payload(db, db.get(ArticleJob, article["id"]))
+        assert payload["search_intent"] == "informational support"
+        assert "Do not turn this into a buyer guide" in payload["recommended_article_angle"]
+        assert "running cost explainer" not in " ".join(payload["original_value_points"]).lower()
+        assert len(payload["faq_questions"]) == 5
+        assert payload["required_sections"] == [
+            "short answer",
+            "when it helps",
+            "when it will not help",
+            "what to do next",
+            "when to get professional help if relevant",
+            "FAQ",
+            "final answer",
+        ]
+    finally:
+        db.close()
 
 
 def test_run_full_workflow_reuses_existing_research(monkeypatch):
