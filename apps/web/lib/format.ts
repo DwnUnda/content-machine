@@ -5,6 +5,7 @@ const localDateTimeOptions: Intl.DateTimeFormatOptions = {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
+  timeZone: "Australia/Brisbane",
 };
 
 function parseApiDateTime(value: string): Date {
