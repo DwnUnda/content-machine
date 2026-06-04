@@ -22,19 +22,21 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import COMPLETED_ARTICLES_DIR
 from app.db.session import SessionLocal
 from app.models.entities import (
     ArticleJob,
+    ArticleJobStatus,
     PostType,
     StandardPostBatch,
     StandardPostBatchItem,
+    WorkflowRun,
 )
 from app.repositories.crud import CRUDRepository
 from app.services.keyword_parser import slugify
@@ -44,6 +46,7 @@ from app.services import workflow as workflow_service
 
 
 STANDARD_POST_ARTICLE_TYPE = PostType.INFORMATIONAL_BLOG.value
+RUNNING_WORKFLOW_STALE_AFTER = timedelta(minutes=20)
 
 # Active worker threads keyed by batch id, guarding against double-start.
 _active_workers: dict[int, threading.Thread] = {}
@@ -151,6 +154,8 @@ def _run_batch_worker(batch_id: int) -> None:
             if batch.status == "cancelled":
                 _cancel_remaining(db, batch)
                 return
+
+            reconcile_stale_running_items(db, batch)
 
             item = db.scalar(
                 select(StandardPostBatchItem)
@@ -269,6 +274,127 @@ def _process_item(db: Session, batch: StandardPostBatch, item: StandardPostBatch
         db.commit()
         db.refresh(batch)
         _mirror_batch_to_json(batch)
+
+
+def reconcile_stale_running_items(db: Session, batch: StandardPostBatch) -> bool:
+    """Recover batch rows left running after a worker interruption.
+
+    The article workflow can finish successfully while the batch item still says
+    "running" if the process is restarted, the worker thread exits unexpectedly,
+    or a manual article action completes the underlying job. This function maps
+    those stale rows back to the real article/job state.
+    """
+    has_active_worker = bool(batch.id in _active_workers and _active_workers[batch.id].is_alive())
+    running_items = db.scalars(
+        select(StandardPostBatchItem).where(
+            StandardPostBatchItem.batch_id == batch.id,
+            StandardPostBatchItem.status == "running",
+        )
+    ).all()
+    if not running_items:
+        if batch.status == "running" and not has_active_worker:
+            pending_count = db.scalar(
+                select(func.count(StandardPostBatchItem.id)).where(
+                    StandardPostBatchItem.batch_id == batch.id,
+                    StandardPostBatchItem.status == "pending",
+                )
+            )
+            if pending_count:
+                batch.status = "pending"
+                batch.summary_message = "Queue recovered after interruption. Click Start to continue pending items."
+                db.add(batch)
+                db.commit()
+                db.refresh(batch)
+                _mirror_batch_to_json(batch)
+                return True
+            _finalise_batch(db, batch)
+            return True
+        return False
+
+    changed = False
+    now = datetime.utcnow()
+    for item in running_items:
+        item_changed = False
+        job = db.get(ArticleJob, item.article_job_id) if item.article_job_id else None
+        latest_run = None
+        if job:
+            latest_run = db.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.article_job_id == job.id, WorkflowRun.workflow_mode == "full_draft")
+                .order_by(desc(WorkflowRun.updated_at), desc(WorkflowRun.created_at), desc(WorkflowRun.id))
+            )
+
+        job_complete = bool(
+            job
+            and (
+                job.status in {
+                    ArticleJobStatus.READY_FOR_REVIEW.value,
+                    ArticleJobStatus.EXPORTED_TO_WORDPRESS.value,
+                }
+                or (latest_run and latest_run.status == "complete")
+            )
+        )
+        job_failed = bool(latest_run and latest_run.status == "failed")
+        workflow_recently_running = bool(
+            latest_run
+            and latest_run.status == "running"
+            and (datetime.utcnow() - (latest_run.updated_at or latest_run.created_at)) < RUNNING_WORKFLOW_STALE_AFTER
+        )
+
+        if job_complete:
+            item.status = "complete"
+            item.current_step = None
+            item.article_folder = job.local_export_path if job else item.article_folder
+            item.error_message = None
+            item.completed_at = item.completed_at or now
+            item_changed = True
+        elif job_failed:
+            item.status = "failed"
+            item.current_step = None
+            item.error_message = latest_run.summary_message or "Workflow failed."
+            item.completed_at = item.completed_at or now
+            item_changed = True
+        elif workflow_recently_running:
+            # Another process/thread may still be working. Do not mark the row
+            # failed just because this process does not have that worker in memory.
+            continue
+        elif not has_active_worker:
+            item.status = "failed"
+            item.current_step = None
+            item.error_message = "Interrupted while running. Retry this item to run it again."
+            item.completed_at = item.completed_at or now
+            item_changed = True
+
+        if item_changed:
+            db.add(item)
+            changed = True
+
+    if not changed:
+        return False
+
+    db.flush()
+    pending_count = db.scalar(
+        select(func.count(StandardPostBatchItem.id)).where(
+            StandardPostBatchItem.batch_id == batch.id,
+            StandardPostBatchItem.status == "pending",
+        )
+    )
+    running_count = db.scalar(
+        select(func.count(StandardPostBatchItem.id)).where(
+            StandardPostBatchItem.batch_id == batch.id,
+            StandardPostBatchItem.status == "running",
+        )
+    )
+    if not running_count and pending_count and not has_active_worker:
+        batch.status = "pending"
+        batch.summary_message = "Queue recovered after interruption. Click Start to continue pending items."
+        db.add(batch)
+    db.commit()
+    db.refresh(batch)
+    _mirror_batch_to_json(batch)
+    if not running_count and not pending_count:
+        _finalise_batch(db, batch)
+    return True
 
 
 def _cancel_remaining(db: Session, batch: StandardPostBatch) -> None:

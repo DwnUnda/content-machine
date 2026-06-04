@@ -37,14 +37,22 @@ def _counts(batch: StandardPostBatch) -> StandardPostBatchCounts:
     return counts
 
 
-def _summary(batch: StandardPostBatch) -> StandardPostBatchSummary:
+def _summary(db: Session, batch: StandardPostBatch) -> StandardPostBatchSummary:
+    if batch.status == "running" and not standard_post_queue.is_batch_running(batch.id):
+        # Recover rows left running after a backend restart or worker interruption
+        # before presenting counts to the UI.
+        standard_post_queue.reconcile_stale_running_items(db, batch)
+        db.refresh(batch)
     base = StandardPostBatchSummary.model_validate(batch)
     base.counts = _counts(batch)
     base.is_running = standard_post_queue.is_batch_running(batch.id)
     return base
 
 
-def _detail(batch: StandardPostBatch) -> StandardPostBatchDetail:
+def _detail(db: Session, batch: StandardPostBatch) -> StandardPostBatchDetail:
+    if batch.status == "running" and not standard_post_queue.is_batch_running(batch.id):
+        standard_post_queue.reconcile_stale_running_items(db, batch)
+        db.refresh(batch)
     detail = StandardPostBatchDetail.model_validate(batch)
     detail.counts = _counts(batch)
     detail.is_running = standard_post_queue.is_batch_running(batch.id)
@@ -69,7 +77,7 @@ def list_batches(db: Session = Depends(get_db)) -> list[StandardPostBatchSummary
         .options(selectinload(StandardPostBatch.items))
         .order_by(desc(StandardPostBatch.created_at))
     ).all()
-    return [_summary(batch) for batch in batches]
+    return [_summary(db, batch) for batch in batches]
 
 
 @router.post("", response_model=StandardPostBatchDetail, status_code=status.HTTP_201_CREATED)
@@ -98,12 +106,12 @@ def create_batch(payload: StandardPostBatchCreate, db: Session = Depends(get_db)
     db.add(batch)
     db.commit()
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 @router.get("/{batch_id}", response_model=StandardPostBatchDetail)
 def get_batch(batch_id: int, db: Session = Depends(get_db)) -> StandardPostBatchDetail:
-    return _detail(_get_batch_or_404(db, batch_id))
+    return _detail(db, _get_batch_or_404(db, batch_id))
 
 
 @router.post("/{batch_id}/start", response_model=StandardPostBatchDetail)
@@ -113,7 +121,7 @@ def start_batch(batch_id: int, db: Session = Depends(get_db)) -> StandardPostBat
         raise HTTPException(status_code=409, detail="Batch is already running.")
     standard_post_queue.start_batch(db, batch)
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 @router.post("/{batch_id}/pause", response_model=StandardPostBatchDetail)
@@ -121,7 +129,7 @@ def pause_batch(batch_id: int, db: Session = Depends(get_db)) -> StandardPostBat
     batch = _get_batch_or_404(db, batch_id)
     standard_post_queue.request_pause(db, batch)
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 @router.post("/{batch_id}/resume", response_model=StandardPostBatchDetail)
@@ -129,7 +137,7 @@ def resume_batch(batch_id: int, db: Session = Depends(get_db)) -> StandardPostBa
     batch = _get_batch_or_404(db, batch_id)
     standard_post_queue.resume_batch(db, batch)
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 @router.post("/{batch_id}/cancel", response_model=StandardPostBatchDetail)
@@ -137,7 +145,7 @@ def cancel_batch(batch_id: int, db: Session = Depends(get_db)) -> StandardPostBa
     batch = _get_batch_or_404(db, batch_id)
     standard_post_queue.request_cancel(db, batch)
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 def _get_item_or_404(db: Session, batch_id: int, item_id: int) -> StandardPostBatchItem:
@@ -159,7 +167,7 @@ def retry_item(batch_id: int, item_id: int, db: Session = Depends(get_db)) -> St
     if not standard_post_queue.retry_item(db, batch, item):
         raise HTTPException(status_code=400, detail="Item cannot be retried in its current state.")
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
 
 
 @router.post("/{batch_id}/items/{item_id}/skip", response_model=StandardPostBatchDetail)
@@ -169,4 +177,4 @@ def skip_item(batch_id: int, item_id: int, db: Session = Depends(get_db)) -> Sta
     if not standard_post_queue.skip_item(db, item):
         raise HTTPException(status_code=400, detail="Only pending items can be skipped.")
     db.refresh(batch)
-    return _detail(batch)
+    return _detail(db, batch)
