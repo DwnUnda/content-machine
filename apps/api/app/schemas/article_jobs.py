@@ -68,3 +68,7 @@ class WorkflowActionResponse(BaseModel):
     status: str
     message: str
     next_step: str | None = None
+
+
+class EditorCorrectionRequest(BaseModel):
+    correction_notes: str = Field(min_length=1, max_length=4000)

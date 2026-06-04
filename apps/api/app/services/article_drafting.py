@@ -27,6 +27,7 @@ from app.services.anthropic_client import AnthropicClient, AnthropicError
 from app.services.content_rules import get_qa_threshold
 from app.services.logging import create_app_log
 from app.services.openai_client import OpenAIClient, OpenAIError
+from app.services.post_scope import commercial_page_scope, get_min_products_for_article
 from app.services.post_type_generation_rules import get_post_type_generation_rules
 
 
@@ -78,6 +79,7 @@ INFORMATIONAL_SUPPORT_HARD_MAX_WORDS = 2700
 INFORMATIONAL_SUPPORT_MAX_H2S = 8
 INFORMATIONAL_SUPPORT_HARD_MAX_H2S = 12
 INFORMATIONAL_SUPPORT_MAX_FAQS = 5
+COMMERCIAL_MAX_FAQS = 8
 
 
 def _draft_max_output_tokens(job: ArticleJob) -> int:
@@ -293,6 +295,26 @@ def _count_faq_questions(value: str | None) -> int:
     return len(re.findall(r"\?", faq_body))
 
 
+def _count_product_review_blocks(value: str | None) -> int:
+    text = value or ""
+    html_blocks = len(re.findall(r'class=["\']product-review["\']', text, flags=re.IGNORECASE))
+    markdown_ranked_reviews = len(re.findall(r"(?m)^##\s+\d+\.\s+.+", text))
+    return max(html_blocks, markdown_ranked_reviews)
+
+
+def _has_toc_block(value: str | None) -> bool:
+    text = (value or "").lower()
+    return 'class="hdl-toc"' in text or "class='hdl-toc'" in text or 'class="toc"' in text or "table of contents" in text
+
+
+def _has_internal_links(value: str | None) -> bool:
+    return bool(re.search(r'href=["\']/(?!/)', value or "", flags=re.IGNORECASE))
+
+
+def _count_product_image_placeholders(value: str | None) -> int:
+    return len(re.findall(r"product-image-placeholder", value or "", flags=re.IGNORECASE))
+
+
 def _is_direct_question_keyword(value: str | None) -> bool:
     text = (value or "").strip().lower()
     return bool(
@@ -452,6 +474,82 @@ def _apply_informational_density_guardrails(
             passed = False
 
     return failed_checks, warnings, fix_instructions, score, passed, max_word_count, word_count <= max_word_count
+
+
+def _apply_commercial_money_page_guardrails(
+    *,
+    db: Session,
+    job: ArticleJob,
+    context: dict,
+    word_count: int,
+    failed_checks: list,
+    warnings: list,
+    fix_instructions: list,
+    score: float,
+    passed: bool,
+    threshold: int,
+    draft_markdown: str,
+) -> tuple[list, list, list, float, bool]:
+    if job.post_type not in {PostType.MONEY_POST.value, PostType.BEST_X_FOR_Y.value}:
+        return failed_checks, warnings, fix_instructions, score, passed
+
+    scope = commercial_page_scope(job.post_type, job.primary_keyword, job.title)
+    product_review_count = _count_product_review_blocks(draft_markdown)
+    min_products = get_min_products_for_article(job)
+    faq_count = _count_faq_questions(draft_markdown)
+    has_toc = _has_toc_block(draft_markdown)
+    internal_targets = context.get("internal_link_targets") or {}
+    has_known_internal_target = bool(internal_targets.get("primary_cta") or internal_targets.get("related_articles"))
+    placeholders = _count_product_image_placeholders(draft_markdown)
+
+    if scope == "broad_category_money_page" and product_review_count < min_products:
+        failed_checks = [
+            *failed_checks,
+            (
+                f"Broad category money page is too thin: {product_review_count} product review blocks found; "
+                f"at least {min_products} are required for this broad buyer guide."
+            ),
+        ]
+        warnings = [*warnings, "Broad 'best category Australia' pages need wider product coverage than narrow use-case pages."]
+        fix_instructions = [
+            *fix_instructions,
+            "Expand this broad money page to 8-10 researched product entries with clear best-by-use-case roles.",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if scope == "broad_category_money_page" and not has_toc and word_count >= 3500:
+        failed_checks = [*failed_checks, "Long broad money page is missing a visible table of contents block."]
+        fix_instructions = [
+            *fix_instructions,
+            "Add a compact table of contents near the top, after the quick answer/top picks/comparison intro flow.",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if faq_count > COMMERCIAL_MAX_FAQS:
+        warnings = [*warnings, f"Commercial FAQ is oversized ({faq_count} questions). Use 6-8 high-intent questions."]
+        fix_instructions = [*fix_instructions, "Reduce the commercial FAQ to 6-8 questions that do not repeat product reviews."]
+
+    if has_known_internal_target and not _has_internal_links(draft_markdown):
+        failed_checks = [*failed_checks, "Known internal link targets exist, but the draft includes no internal links."]
+        fix_instructions = [
+            *fix_instructions,
+            "Add contextual internal links to known cluster or related article targets. Do not invent URLs.",
+        ]
+        score = min(score, float(threshold - 1))
+        passed = False
+
+    if placeholders:
+        warnings = [
+            *warnings,
+            (
+                f"{placeholders} product image placeholder(s) found. This is acceptable for draft generation, "
+                "but real authorised product images or neutral generated images should be reviewed before publishing."
+            ),
+        ]
+
+    return failed_checks, warnings, fix_instructions, score, passed
 
 
 def _normalise_content_modules(value) -> list[dict]:
@@ -980,6 +1078,8 @@ def _build_context(db: Session, job: ArticleJob) -> dict:
             "title": job.title,
             "primary_keyword": job.primary_keyword,
             "post_type": job.post_type,
+            "commercial_page_scope": commercial_page_scope(job.post_type, job.primary_keyword, job.title),
+            "minimum_product_count": get_min_products_for_article(job),
             "target_audience": job.target_audience,
             "australian_angle": job.australian_angle,
             "notes": job.notes,
@@ -1023,7 +1123,7 @@ def _build_context(db: Session, job: ArticleJob) -> dict:
         # NOT raw page body text. The full visible_text_extract stays on the DB row.
         "competitor_pages": _competitor_patterns_summary(competitor_rows, limit=5),
         "reddit_feedback": _latest_reddit_feedback(db, job.id),
-        "products": [_serialise_product(product) for product in linked_products[:4]],
+        "products": [_serialise_product(product) for product in linked_products[:10]],
         "products_available": bool(linked_products),
         "linked_products_count": len(linked_products),
         "product_policy": {
@@ -1518,6 +1618,29 @@ def _build_fix_input(context: dict, draft_markdown: str, qa_findings: dict | Non
     }
 
 
+def _build_editor_correction_input(context: dict, draft_markdown: str, correction_notes: str) -> dict:
+    brief_outline = context["research_brief"]["outline_json"] or {}
+    return {
+        "article_context": {
+            "title": context["article_job"]["title"],
+            "primary_keyword": context["article_job"]["primary_keyword"],
+            "post_type": context["article_job"]["post_type"],
+            "commercial_page_scope": context["article_job"].get("commercial_page_scope"),
+            "minimum_product_count": context["article_job"].get("minimum_product_count"),
+        },
+        "research_brief": _brief_rules_summary(brief_outline),
+        "serp_intent": _serp_intent_blocks_summary(context.get("serp_intent")),
+        "internal_link_targets": context.get("internal_link_targets"),
+        "products": context["products"],
+        "products_available": context["products_available"],
+        "product_policy": context["product_policy"],
+        "content_rules": context["content_rules"],
+        "post_type_generation_rules": context.get("post_type_generation_rules"),
+        "editor_correction_notes": correction_notes,
+        "draft_markdown": draft_markdown,
+    }
+
+
 def _build_repair_input(context: dict, current_markdown: str, *, stage: str) -> dict:
     """Compact input for the draft tail repair.
 
@@ -1810,6 +1933,19 @@ def run_qa(db: Session, job: ArticleJob, *, stage: str = "initial") -> dict:
             threshold=threshold,
             draft_markdown=draft.draft_markdown,
         )
+        failed_checks, warnings, fix_instructions, score, passed = _apply_commercial_money_page_guardrails(
+            db=db,
+            job=job,
+            context=context,
+            word_count=word_count,
+            failed_checks=failed_checks,
+            warnings=warnings,
+            fix_instructions=fix_instructions,
+            score=score,
+            passed=passed,
+            threshold=threshold,
+            draft_markdown=draft.draft_markdown,
+        )
         serp_intent_for_qa = context.get("serp_intent") or {}
         findings = {
             "stage": stage,
@@ -2017,6 +2153,89 @@ def run_fix_pass(db: Session, job: ArticleJob) -> dict:
             article_job_id=job.id,
             level="ERROR",
             metadata_json={"prompt_file": _prompt_path("australian_human_edit_prompt.md")},
+        )
+        raise
+
+
+def apply_editor_corrections(db: Session, job: ArticleJob, correction_notes: str) -> dict:
+    notes = str(correction_notes or "").strip()
+    if not notes:
+        raise ArticleDraftingError("Correction notes are required.")
+    if len(notes) > 4000:
+        raise ArticleDraftingError("Correction notes are too long. Keep them under 4,000 characters.")
+
+    create_app_log(
+        db,
+        event_type="workflow.editor_corrections.started",
+        message="Editor correction pass started.",
+        article_job_id=job.id,
+        metadata_json={"prompt_file": _prompt_path("editor_correction_prompt.md"), "provider": "Anthropic"},
+    )
+    try:
+        context = _build_context(db, job)
+        source_draft = db.scalar(
+            select(ArticleDraft)
+            .where(ArticleDraft.article_job_id == job.id)
+            .order_by(desc(ArticleDraft.created_at))
+        )
+        if not source_draft or not source_draft.draft_markdown:
+            raise ArticleDraftingError("A draft is required before editor corrections can run.")
+
+        client = AnthropicClient()
+        response = client.generate_text(
+            system_prompt=_article_body_system_prompt(_read_prompt("editor_correction_prompt.md"), stage="editor correction"),
+            user_prompt=json.dumps(
+                _build_editor_correction_input(context, source_draft.draft_markdown, notes),
+                indent=2,
+                ensure_ascii=False,
+            ),
+            max_tokens=_draft_max_output_tokens(job),
+        )
+        draft_markdown = _article_body_from_text(response.content_text)
+        if not draft_markdown.strip():
+            raise ArticleDraftingError("Editor correction response did not include draft_markdown.")
+        _assert_ai_output_complete(client, markdown=draft_markdown, stage="Editor correction")
+        draft_markdown = _finalise_draft_markdown(db, job, context, draft_markdown, stage="editor_correction")
+        payload = DraftPayload(draft_markdown=draft_markdown, notes=[notes], title_options=[], content_modules=[])
+        content_modules = _content_modules_for_save(job, payload, draft_markdown)
+        revised = _save_draft(
+            db,
+            job_id=job.id,
+            draft_markdown=draft_markdown,
+            stage="editor_correction",
+            model_name=getattr(client, "last_model", None) or _response_model_name(response),
+            prompt_name="editor_correction_prompt.md",
+            source_payload_json={
+                "editor_correction_notes": notes,
+                "source_draft_id": source_draft.id,
+                "content_modules": content_modules,
+            },
+        )
+        job.status = ArticleJobStatus.DRAFT_COMPLETE.value
+        db.add(job)
+        db.commit()
+        create_app_log(
+            db,
+            event_type="workflow.editor_corrections.completed",
+            message="Editor correction pass completed.",
+            article_job_id=job.id,
+            metadata_json={"draft_id": revised.id, "source_draft_id": source_draft.id, **client.usage_metadata()},
+        )
+        return {
+            "action": "apply editor corrections",
+            "article_job_id": job.id,
+            "status": job.status,
+            "message": "Editor corrections saved as a new draft version. Run QA again to confirm.",
+            "next_step": "Run QA",
+        }
+    except (AnthropicError, ArticleDraftingError) as exc:
+        create_app_log(
+            db,
+            event_type="workflow.editor_corrections.failed",
+            message=f"Editor correction pass failed: {exc}",
+            article_job_id=job.id,
+            level="ERROR",
+            metadata_json={"prompt_file": _prompt_path("editor_correction_prompt.md")},
         )
         raise
 

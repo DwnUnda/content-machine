@@ -276,6 +276,7 @@ export function ArticleDetail({ id }: { id: number }) {
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [editorCorrectionNotes, setEditorCorrectionNotes] = useState("");
 
   async function load() {
     try {
@@ -558,6 +559,29 @@ export function ArticleDetail({ id }: { id: number }) {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fix pass failed.");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function applyEditorCorrections() {
+    const notes = editorCorrectionNotes.trim();
+    if (!notes) {
+      setError("Add correction notes before applying edits.");
+      return;
+    }
+    setLoadingAction("apply-editor-corrections");
+    setMessage(null);
+    setMessageDraftLink(false);
+    setError(null);
+    try {
+      const result = await api.applyEditorCorrections(id, notes);
+      setMessage(result.message);
+      setEditorCorrectionNotes("");
+      setActiveTab("Draft");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Editor correction pass failed.");
     } finally {
       setLoadingAction(null);
     }
@@ -1532,6 +1556,34 @@ export function ArticleDetail({ id }: { id: number }) {
                     <div className="muted">No explicit renderer modules saved for this draft yet. The renderer will fall back to heading-based inference.</div>
                   )}
                 </div>
+                <div className="panel stack">
+                  <div>
+                    <strong>Editor corrections</strong>
+                    <div className="muted">
+                      Add specific instructions for the latest draft. This saves a new draft version and does not overwrite the current one.
+                    </div>
+                  </div>
+                  <textarea
+                    className="textarea"
+                    disabled={loadingAction === "apply-editor-corrections"}
+                    maxLength={4000}
+                    onChange={(event) => setEditorCorrectionNotes(event.target.value)}
+                    placeholder={"Example: Cut this to 1,800 words. Remove the running-cost section. Add a short CTA after the first section. Reduce FAQ to 5 questions."}
+                    rows={7}
+                    value={editorCorrectionNotes}
+                  />
+                  <div className="toolbar">
+                    <span className="muted">{editorCorrectionNotes.trim().length}/4000 characters</span>
+                    <button
+                      className="button"
+                      disabled={loadingAction === "apply-editor-corrections" || !editorCorrectionNotes.trim()}
+                      onClick={applyEditorCorrections}
+                      type="button"
+                    >
+                      {loadingAction === "apply-editor-corrections" ? "Applying corrections..." : "Apply Corrections"}
+                    </button>
+                  </div>
+                </div>
                 <div><strong>Draft markdown</strong></div>
                 <textarea className="textarea" readOnly rows={26} value={latestDraft.draft_markdown || ""} />
                 <div className="stack">
@@ -1704,7 +1756,7 @@ export function ArticleDetail({ id }: { id: number }) {
           <div className="empty">No logs for this article yet.</div>
         );
     }
-  }, [activeTab, article, logs, serpResults, keywordResearch, competitorPages, serpAnalysis, productCandidates, articleProducts, briefs, drafts, qaReports, briefDraft, loadingAction, productSourceType, productSourceUrl, generateDraft, runHumanEdit, runQa, runFixPass, draftReadyProducts, needsProductCards, productReadinessMessage, urlsAdded, extractionFailedCount, needReviewCount, latestDraftModules, previewError, previewHtml, previewLoading, publishReadiness, canUploadWordPressDraft, uploadDisabledReason]);
+  }, [activeTab, article, logs, serpResults, keywordResearch, competitorPages, serpAnalysis, productCandidates, articleProducts, briefs, drafts, qaReports, briefDraft, loadingAction, productSourceType, productSourceUrl, generateDraft, runHumanEdit, runQa, runFixPass, applyEditorCorrections, editorCorrectionNotes, draftReadyProducts, needsProductCards, productReadinessMessage, urlsAdded, extractionFailedCount, needReviewCount, latestDraftModules, previewError, previewHtml, previewLoading, publishReadiness, canUploadWordPressDraft, uploadDisabledReason]);
 
   if (error && !article) {
     return <div className="message error">{error}</div>;

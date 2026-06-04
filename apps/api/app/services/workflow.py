@@ -43,6 +43,12 @@ from app.services.competitor_extraction import extract_competitors_for_job
 from app.services.dataforseo import DataForSEOClient, DataForSEOError, parse_keyword_ideas, parse_serp_items
 from app.services.logging import create_app_log
 from app.services.local_exports import sync_article_export
+from app.services.post_scope import (
+    BASE_POST_TYPE_MIN_PRODUCTS,
+    get_max_products_for_article,
+    get_min_products_for_article,
+    get_min_products_for_post_type as scoped_min_products_for_post_type,
+)
 from app.services.research_brief import build_research_brief_payload, render_research_brief_markdown
 from app.services.serp_analysis import analyse_serp_for_job
 from app.services.html_validation import serialise_html_validation, validate_latest_article_html
@@ -50,21 +56,16 @@ from app.services.html_validation import serialise_html_validation, validate_lat
 
 PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts"
 NOT_CONFIRMED = "Not confirmed"
-# Per-post-type minimum number of draft-ready product cards required before
-# the draft step is permitted.  0 means products are not required.
-POST_TYPE_MIN_PRODUCTS: dict[str, int] = {
-    PostType.INFORMATIONAL_BLOG.value: 0,
-    PostType.MONEY_POST.value: 3,
-    PostType.SINGLE_PRODUCT_REVIEW.value: 1,
-    PostType.PRODUCT_COMPARISON.value: 2,
-    PostType.BEST_X_FOR_Y.value: 3,
-}
-MAX_PRODUCT_CARDS = 5
+# Backwards-compatible per-post-type defaults. Use get_min_products_for_article
+# when an ArticleJob is available so broad category money pages can demand more
+# depth than narrow use-case guides.
+POST_TYPE_MIN_PRODUCTS: dict[str, int] = BASE_POST_TYPE_MIN_PRODUCTS
+MAX_PRODUCT_CARDS = 10
 
 
 def get_min_products_for_post_type(post_type: str) -> int:
     """Return the minimum draft-ready product cards required for *post_type*."""
-    return POST_TYPE_MIN_PRODUCTS.get(post_type, 0)
+    return scoped_min_products_for_post_type(post_type)
 
 
 def is_product_gated_post_type(post_type: str) -> bool:
@@ -313,7 +314,7 @@ def _latest_html_file(job: ArticleJob, latest_draft: ArticleDraft | None) -> Pat
 def build_publish_readiness(db: Session, job: ArticleJob) -> dict:
     latest_draft = _latest_row(db, ArticleDraft, job.id)
     latest_qa = _latest_row(db, QaReport, job.id)
-    min_products = get_min_products_for_post_type(job.post_type)
+    min_products = get_min_products_for_article(job)
     draft_ready_products = sum(
         1 for link in getattr(job, "article_product_links", []) if link and getattr(link, "draft_ready", False)
     )
@@ -539,7 +540,7 @@ def get_workflow_state(db: Session, job: ArticleJob) -> dict:
         brief_detail = prior_status[1] or "Research brief has not been generated yet."
     states["research_brief"] = _workflow_step_state(brief_detail, status=brief_status)
 
-    min_products = get_min_products_for_post_type(job.post_type)
+    min_products = get_min_products_for_article(job)
     if min_products == 0:
         product_research_status = "not_required"
         product_research_detail = "Product cards are not required for this post type."
@@ -854,7 +855,7 @@ def _linked_product_missing_fields(link) -> list[str]:
 def get_drafting_readiness(db: Session, job: ArticleJob) -> dict:
     linked_products = [link for link in getattr(job, "article_product_links", []) if link]
     draft_ready_links = [link for link in linked_products if getattr(link, "draft_ready", False)]
-    min_products_required = get_min_products_for_post_type(job.post_type)
+    min_products_required = get_min_products_for_article(job)
     needs_product_cards = min_products_required > 0
     issues: list[str] = []
 
@@ -965,9 +966,9 @@ def run_product_research(db: Session, job: ArticleJob) -> dict:
     # 2) If still below the floor, discover more products (up to the cap) and research them.
     db.refresh(job)
     discovered = 0
-    if _draft_ready_count(job) < get_min_products_for_post_type(job.post_type):
+    if _draft_ready_count(job) < get_min_products_for_article(job):
         current_links = len([link for link in getattr(job, "article_product_links", []) if link])
-        need = MAX_PRODUCT_CARDS - current_links
+        need = min(MAX_PRODUCT_CARDS, get_max_products_for_article(job)) - current_links
         if need > 0:
             try:
                 new_links = discover_products_via_websearch(db, job, max_products=need)

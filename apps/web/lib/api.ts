@@ -107,6 +107,11 @@ export const api = {
     request<WorkflowResult>(`/article-jobs/${jobId}/run-qa`, { method: "POST" }),
   runFixPass: (jobId: number) =>
     request<WorkflowResult>(`/article-jobs/${jobId}/run-fix-pass`, { method: "POST" }),
+  applyEditorCorrections: (jobId: number, correction_notes: string) =>
+    request<WorkflowResult>(`/article-jobs/${jobId}/apply-editor-corrections`, {
+      method: "POST",
+      body: JSON.stringify({ correction_notes }),
+    }),
   generateResearchBrief: (jobId: number) =>
     request<WorkflowResult>(`/article-jobs/${jobId}/generate-research-brief`, { method: "POST" }),
   getLatestWorkflowRun: (id: number) => request<WorkflowRun | null>(`/article-jobs/${id}/workflow-runs/latest`),

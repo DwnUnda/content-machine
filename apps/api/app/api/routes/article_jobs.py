@@ -26,7 +26,7 @@ from app.models.entities import (
     WorkflowRunStep,
 )
 from app.repositories.crud import CRUDRepository
-from app.schemas.article_jobs import ArticleJobCreate, ArticleJobDetail, ArticleJobSummary, ArticleJobUpdate, WorkflowActionResponse
+from app.schemas.article_jobs import ArticleJobCreate, ArticleJobDetail, ArticleJobSummary, ArticleJobUpdate, EditorCorrectionRequest, WorkflowActionResponse
 from app.schemas.briefs import ArticleBriefListResponse, ArticleBriefResponse, ArticleBriefUpdateRequest
 from app.schemas.competitors import CompetitorAnalysisReportResponse, CompetitorPagesListResponse
 from app.schemas.drafts import ArticleDraftListResponse, ArticleDraftResponse
@@ -38,7 +38,7 @@ from app.schemas.research import KeywordResearchListResponse, SerpResultsListRes
 from app.schemas.workflow_runs import FullWorkflowRequest, WorkflowRunResponse, WorkflowStateResponse
 from app.services.article_recovery import ArticleRecoveryError, restore_article_from_export
 from app.services.anthropic_client import AnthropicError
-from app.services.article_drafting import ArticleDraftingError
+from app.services.article_drafting import ArticleDraftingError, apply_editor_corrections
 from app.services.article_drafting import list_article_drafts, list_qa_reports
 from app.core.config import get_settings
 from app.services.dataforseo import DataForSEOError
@@ -331,6 +331,21 @@ def run_fix_pass(job_id: int, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (AnthropicError, OpenAIError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/{job_id}/apply-editor-corrections", response_model=WorkflowActionResponse)
+def apply_editor_correction_notes(job_id: int, payload: EditorCorrectionRequest, db: Session = Depends(get_db)) -> dict:
+    job = repo.get(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Article job not found")
+    try:
+        result = apply_editor_corrections(db, job, payload.correction_notes)
+    except ArticleDraftingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (AnthropicError, OpenAIError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    sync_article_export(db, job, reason="editor_corrections")
+    return result
 
 
 @router.get("/{job_id}/briefs", response_model=ArticleBriefListResponse)

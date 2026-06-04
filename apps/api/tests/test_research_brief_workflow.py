@@ -199,6 +199,10 @@ def test_run_full_workflow_reuses_existing_research(monkeypatch):
         },
     )
     monkeypatch.setattr(
+        "app.services.workflow.run_reddit_feedback_research",
+        lambda db, job: {"message": "Reddit feedback skipped in test."},  # noqa: ARG005
+    )
+    monkeypatch.setattr(
         "app.services.workflow.run_qa",
         lambda db, job, stage="initial": {  # noqa: ARG005
             "action": "run QA",

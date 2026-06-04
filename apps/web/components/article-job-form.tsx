@@ -157,6 +157,7 @@ export function ArticleJobForm() {
           />
           <div className="muted small-copy">
             Optional. Any URLs you add are extracted first; if fewer than {minProducts} draft-ready card{minProducts === 1 ? "" : "s"} result, AI web search automatically finds and researches more Australian products. Unconfirmed facts stay as Not confirmed.
+            Broad category money pages such as "best dehumidifier Australia" may require 8+ draft-ready products after the topic is classified.
           </div>
         </div>
       ) : null}

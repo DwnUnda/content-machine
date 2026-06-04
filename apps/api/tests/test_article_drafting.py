@@ -12,7 +12,7 @@ from app.main import app
 from app.models.entities import ArticleBrief, ArticleDraft, ArticleJob, ArticleJobProduct, CompetitorAnalysisReport, CompetitorPage, ContentCluster, KeywordResearch, Product, QaReport, SerpResult
 from app.services import article_drafting as ad
 from app.services.anthropic_client import AnthropicClient, AnthropicError
-from app.services.article_drafting import generate_draft, run_fix_pass, run_human_edit, run_qa
+from app.services.article_drafting import apply_editor_corrections, generate_draft, run_fix_pass, run_human_edit, run_qa
 from app.services.openai_client import OpenAIClient, OpenAIError
 from app.services.workflow import get_drafting_readiness, set_manual_review_override
 
@@ -397,6 +397,86 @@ def test_money_page_drafting_blocked_without_three_draft_ready_products():
         readiness = get_drafting_readiness(db, db.get(ArticleJob, job["id"]))
         assert readiness["can_generate_draft"] is False
         assert readiness["draft_ready_products"] == 0
+    finally:
+        db.close()
+
+
+def test_broad_money_page_qa_fails_when_product_depth_is_too_thin(monkeypatch):
+    client = TestClient(app)
+    job = client.post(
+        "/api/article-jobs",
+        json={
+            "title": "Best Dehumidifier Australia",
+            "primary_keyword": "best dehumidifier australia",
+            "post_type": "money_post",
+        },
+    ).json()
+    db = SessionLocal()
+    try:
+        _seed_brief(db, job["id"])
+        openai_payloads = [
+            {"score": 96, "passed": True, "failed_checks": [], "warnings": [], "fix_instructions": [], "manual_override_risk": "low", "summary": "Looks strong."},
+            {"seo_title": "Title", "meta_description": "Meta", "slug": "slug", "excerpt": "Excerpt"},
+        ]
+        monkeypatch.setattr(OpenAIClient, "generate_json", lambda self, **kwargs: openai_payloads.pop(0))  # noqa: ARG005
+
+        draft = "\n".join(
+            [
+                '<article class="money-post">',
+                f'<section class="money-hero"><p>{" ".join(["buyer"] * 2800)}</p></section>',
+                '<section class="product-reviews">',
+                *[
+                    f'<div class="product-review"><h2>{i}. Product {i}</h2><p>{" ".join(["review"] * 200)}</p></div>'
+                    for i in range(1, 5)
+                ],
+                "</section>",
+                '<section class="faq-section"><h2>Frequently asked questions</h2><details><summary>Question?</summary><p>Answer.</p></details></section>',
+                '<section class="final-verdict"><h2>Final recommendation</h2><p>Final.</p></section>',
+                "</article>",
+            ]
+        )
+        db.add(ArticleDraft(article_job_id=job["id"], version=1, stage="human_edit", draft_markdown=draft))
+        db.commit()
+
+        result = run_qa(db, db.get(ArticleJob, job["id"]))
+        assert result["status"] == "QA failed"
+        report = db.query(QaReport).filter(QaReport.article_job_id == job["id"]).order_by(QaReport.id.desc()).first()
+        failed = " ".join(str(item) for item in report.findings_json["failed_checks"])
+        assert "Broad category money page is too thin" in failed
+        assert "missing a visible table of contents" in failed
+    finally:
+        db.close()
+
+
+def test_apply_editor_corrections_saves_new_draft_version(monkeypatch):
+    client = TestClient(app)
+    job = _create_job(client, post_type="informational_blog")
+    db = SessionLocal()
+    try:
+        _seed_brief(db, job["id"])
+        db.add(
+            ArticleDraft(
+                article_job_id=job["id"],
+                version=1,
+                stage="final",
+                draft_markdown=_complete_markdown("Original draft", 1250),
+            )
+        )
+        db.commit()
+
+        def fake_anthropic_generate_text(self, *, system_prompt, user_prompt, model=None, max_tokens=4000, cache=True):  # noqa: ARG001
+            assert "Cut the FAQ" in user_prompt
+            return SimpleNamespace(content_text=_complete_markdown("Corrected draft", 1250), model=model or "test-model")
+
+        monkeypatch.setattr(AnthropicClient, "generate_text", fake_anthropic_generate_text)
+
+        result = apply_editor_corrections(db, db.get(ArticleJob, job["id"]), "Cut the FAQ to 5 questions.")
+        assert result["status"] == "Draft complete"
+        latest = db.query(ArticleDraft).filter(ArticleDraft.article_job_id == job["id"]).order_by(ArticleDraft.version.desc()).first()
+        assert latest.version == 2
+        assert latest.stage == "editor_correction"
+        assert "Corrected draft" in latest.draft_markdown
+        assert latest.source_payload_json["editor_correction_notes"] == "Cut the FAQ to 5 questions."
     finally:
         db.close()
 

@@ -16,7 +16,7 @@ def _make_job(post_type: str) -> int:
     client = TestClient(app)
     return client.post(
         "/api/article-jobs",
-        json={"title": "Best dehumidifiers", "primary_keyword": "best dehumidifier australia", "post_type": post_type},
+        json={"title": "Best dehumidifier for mould", "primary_keyword": "best dehumidifier for mould australia", "post_type": post_type},
     ).json()["id"]
 
 
@@ -85,6 +85,27 @@ def test_run_product_research_discovers_and_makes_cards_ready(monkeypatch):
         steps = {s["step_key"]: s for s in state["steps"]}
         assert "product_research" in steps
         assert steps["product_research"]["status"] == "complete"
+    finally:
+        db.close()
+
+
+def test_broad_money_page_discovers_more_product_cards(monkeypatch):
+    monkeypatch.setattr(wf, "get_settings", lambda: SimpleNamespace(openai_api_key="x"))
+    monkeypatch.setattr(pr, "discover_products_via_websearch", _fake_discover(8))
+    monkeypatch.setattr(pr, "research_product_via_websearch", _fake_research_makes_ready)
+
+    client = TestClient(app)
+    job_id = client.post(
+        "/api/article-jobs",
+        json={"title": "Best Dehumidifier Australia", "primary_keyword": "best dehumidifier australia", "post_type": "money_post"},
+    ).json()["id"]
+    db = SessionLocal()
+    try:
+        job = db.get(ArticleJob, job_id)
+        result = wf.run_product_research(db, job)
+        assert "Discovered 8" in result["message"]
+        assert wf._draft_ready_count(job) == 8
+        assert wf.get_drafting_readiness(db, job)["draft_ready_products"] == 8
     finally:
         db.close()
 

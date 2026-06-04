@@ -59,7 +59,7 @@ Required CSS classes (use exactly these, not variations):
                     comparison-section | winner-by-use-case |
                     problem-context-section | performance-section |
                     specs-section | pros-cons-section | review-summary-box |
-                    jump-links
+                    jump-links | hdl-toc
 
 Do not include empty or placeholder sections. If source data for a section is
 unavailable, write a short honest caveat instead of fabricating content.
@@ -94,6 +94,23 @@ Commercial content-density rules:
   pros/cons block, decision box, CTA box, callout or product image placeholder.
 - If a section adds no new decision-making value, merge it, shorten it or omit
   it.
+- Broad category money pages (`article_job.commercial_page_scope` =
+  `broad_category_money_page`, e.g. "best dehumidifier Australia") need wider
+  product coverage than narrow use-case pages: use 8-10 products when that many
+  draft-ready product cards are available. Narrow use-case pages should stay
+  more selective.
+- For broad category money pages, include a "Best by use case" or equivalent
+  decision section near the top that maps the category to concrete buyer
+  situations (budget, bedroom, bathroom, mould, laundry drying, large room,
+  compact/small-space, quiet, premium) when supported by product data.
+- For long commercial buyer guides, include a compact visible table of contents
+  block using `<nav class="hdl-toc" aria-label="In this guide">`. Put the
+  buying answer first, then the TOC; do not make buyers scroll through
+  navigation before seeing recommendations.
+- Use provided internal_link_targets only. Add contextual internal links when
+  real targets exist, but never invent site URLs.
+- Add visible source/reference links where product claims depend on a
+  manufacturer page, retailer page, review page, or running-cost assumption.
 """
 
 # ---------------------------------------------------------------------------
@@ -226,6 +243,13 @@ Required HTML structure:
     </div>
   </section>
 
+  <section class="guide-toc-section">
+    <nav class="hdl-toc" aria-label="In this guide">
+      [COMPACT_TOC — 5 to 7 anchors for quick picks, comparison, best by use
+       case, product reviews, how to choose, FAQ]
+    </nav>
+  </section>
+
   <section class="jump-links-section">
     <nav class="jump-links" aria-label="Quick article navigation">
       [SHORT_JUMP_LINKS — 4 to 5 anchors pointing to top picks, quick comparison,
@@ -241,10 +265,12 @@ Required HTML structure:
   </section>
 
   <section class="decision-box">
-    <h2>Which one should you buy?</h2>
+    <h2>Best dehumidifier by use case</h2>
     <div class="decision-grid">
-      [BUYING_DECISION_MODULES — at least 2 modules, e.g. "Which type suits
-       your situation?", "What capacity do you need?", "What should you avoid?"]
+      [BEST_BY_USE_CASE_MODULES — map concrete buyer situations to specific
+       products. For broad category pages include budget, bedroom, bathroom,
+       mould, laundry drying, large-room, compact/small-space and warm/cold
+       climate splits where product data supports them.]
     </div>
   </section>
 
@@ -286,7 +312,19 @@ Above-the-fold rules:
 - Place top-pick cards immediately after the short intro.
 - Put the comparison table before the jump-links nav so the buying answer lands
   before the page turns into navigation.
+- For broad category money pages, add a short quick-answer block or direct
+  verdict before deeper education: there is usually no single best product for
+  every Australian home, so split warm/humid compressor picks from cold/damp
+  desiccant picks when the data supports it.
 - Keep the jump-links nav compact and below the comparison table.
+
+Product depth rules:
+- If `article_job.commercial_page_scope` is `broad_category_money_page`, include
+  all available researched product cards up to 10 and write at least
+  `article_job.minimum_product_count` full product review blocks.
+- Do not call a four-product shortlist a complete broad "best Australia" guide.
+- If fewer than the required product cards are available, say the guide is a
+  shortlist and do not overclaim category authority.
 
 Top-pick card structure:
 <div class="product-card featured">

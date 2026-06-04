@@ -74,6 +74,9 @@ def test_commercial_post_types_remain_html_first():
 def test_money_post_rules_include_required_sections():
     rules = get_post_type_generation_rules("money_post")
     assert "money-hero" in rules
+    assert "hdl-toc" in rules
+    assert "Best dehumidifier by use case" in rules
+    assert "broad_category_money_page" in rules
     assert "methodology-box" in rules
     assert "decision-box" in rules
     assert "product-reviews" in rules
