@@ -65,6 +65,20 @@ Content density rule:
   use, buries recommendations, or creates a generic affiliate-article feel.
 - Prefer concise sections with clear decision value over exhaustive coverage.
 
+Informational support article rule:
+- For informational_blog drafts with a direct question or problem-solving intent,
+  evaluate product guidance at support-article depth. It is enough to explain
+  when a product category helps, when it will not solve the problem, and the
+  few category-level factors that matter.
+- Do not require full buyer-guide specs, product rankings, product reviews, or
+  detailed buying sections for informational_blog support articles unless the
+  brief explicitly asks for a pillar guide or buyer guide.
+- Missing deep product detail should be a warning, not a failed check, when the
+  article is otherwise focused and routes readers toward a relevant buying
+  guide or future internal-link opportunity.
+- Continue to fail unsupported specific product models, invented specs, fake
+  test claims, or confident health/safety claims without evidence.
+
 Internal link rule for this stage:
 - Treat the current QA run as draft-generation QA unless the input explicitly says publish-ready or final-publish mode.
 - If the draft has no internal links and no internal link suggestions, do not fail QA for that alone. Add a warning only.

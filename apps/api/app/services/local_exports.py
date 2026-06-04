@@ -306,7 +306,7 @@ def _article_payload(db: Session, job: ArticleJob) -> dict:
         db.scalars(
             select(QaReport)
             .where(QaReport.article_job_id == job.id)
-            .order_by(QaReport.created_at.desc())
+            .order_by(QaReport.created_at.desc(), QaReport.id.desc())
         ).all()
     )
     workflow_runs = list(

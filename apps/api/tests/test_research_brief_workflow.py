@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -186,6 +188,7 @@ def test_workflow_state_recommends_fix_pass_without_new_paid_calls(monkeypatch):
         "app.services.workflow._latest_completed_log_exists",
         lambda db, article_job_id, event_type: event_type == "workflow.keyword_research.completed",  # noqa: ARG005
     )
+    monkeypatch.setattr("app.services.workflow.get_settings", lambda: SimpleNamespace(openai_api_key=None))
 
     db = SessionLocal()
     try:
@@ -231,3 +234,140 @@ def test_workflow_state_recommends_fix_pass_without_new_paid_calls(monkeypatch):
         assert statuses["qa"] == "failed"
     finally:
         db.close()
+
+
+def test_run_full_workflow_rechecks_reused_fix_pass(monkeypatch):
+    client = TestClient(app)
+    article = client.post(
+        "/api/article-jobs",
+        json={"title": "Humidity Mould", "primary_keyword": "what humidity causes mould", "post_type": "informational_blog"},
+    ).json()
+
+    old_time = datetime.utcnow() - timedelta(minutes=10)
+    new_time = datetime.utcnow() - timedelta(minutes=1)
+    with SessionLocal() as db:
+        db.add(
+            ArticleDraft(
+                article_job_id=article["id"],
+                version=1,
+                stage="human_edit",
+                draft_markdown="# Draft\n\nBody text",
+                prompt_name="australian_human_edit_prompt.md",
+                created_at=old_time,
+                updated_at=old_time,
+            )
+        )
+        db.add(
+            QaReport(
+                article_job_id=article["id"],
+                status="needs_revision",
+                score=80,
+                passed_gate=False,
+                findings_json={"stage": "initial", "failed_checks": ["Needs sharper answer."]},
+                summary="QA failed.",
+                prompt_name="qa_prompt.md",
+                created_at=old_time,
+                updated_at=old_time,
+            )
+        )
+        db.add(
+            ArticleDraft(
+                article_job_id=article["id"],
+                version=2,
+                stage="fix_pass",
+                draft_markdown="# Fixed draft\n\nSharper answer.",
+                prompt_name="fix_pass_prompt.md",
+                created_at=new_time,
+                updated_at=new_time,
+            )
+        )
+        db.commit()
+
+    generic_result = lambda db, job: {  # noqa: E731, ARG005
+        "action": "noop",
+        "article_job_id": job.id,
+        "status": job.status,
+        "message": "Done.",
+    }
+    for name in (
+        "run_serp_research",
+        "run_keyword_research",
+        "extract_competitors",
+        "analyse_serp",
+        "classify_serp_intent",
+        "generate_brief",
+        "run_product_research",
+        "run_reddit_feedback_research",
+        "generate_draft",
+        "run_australian_human_rewrite",
+    ):
+        monkeypatch.setattr(f"app.services.workflow.{name}", generic_result)
+    monkeypatch.setattr(
+        "app.services.workflow.get_drafting_readiness",
+        lambda db, job: {"can_generate_draft": True, "issues": []},  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "app.services.workflow.get_workflow_state",
+        lambda db, job: {  # noqa: ARG005
+            "steps": [
+                {
+                    "step_key": step_key,
+                    "status": status,
+                    "detail": "",
+                    "paid_step": False,
+                }
+                for step_key, status in {
+                    "serp_research": "complete",
+                    "keyword_research": "complete",
+                    "competitor_extraction": "complete",
+                    "serp_analysis": "complete",
+                    "serp_intent": "complete",
+                    "research_brief": "complete",
+                    "product_research": "not_required",
+                    "reddit_feedback": "complete",
+                    "draft_generation": "complete",
+                    "human_edit": "complete",
+                    "qa": "stale",
+                    "fix_pass": "complete",
+                    "qa_recheck": "missing",
+                }.items()
+            ]
+        },
+    )
+
+    qa_stages: list[str] = []
+
+    def fake_qa(db, job, stage="initial"):  # noqa: ANN001
+        qa_stages.append(stage)
+        if stage == "initial":
+            job.status = "QA failed"
+            message = "QA completed. The draft needs a fix pass before it can be marked ready for review."
+        else:
+            job.status = "Ready for review"
+            message = "QA passed and the final draft is ready for review."
+        db.add(job)
+        db.commit()
+        return {
+            "action": "run QA",
+            "article_job_id": job.id,
+            "status": job.status,
+            "message": message,
+            "next_step": None,
+        }
+
+    monkeypatch.setattr("app.services.workflow.run_qa", fake_qa)
+    monkeypatch.setattr(
+        "app.services.workflow.run_ai_fix_pass",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Existing fix pass should be reused")),  # noqa: ARG005
+    )
+
+    response = client.post(
+        f"/api/article-jobs/{article['id']}/run-full-workflow",
+        json={"research_mode": "resume_current"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    statuses = {step["step_key"]: step["status"] for step in payload["steps"]}
+    assert statuses["fix_pass"] == "skipped"
+    assert statuses["qa_recheck"] == "complete"
+    assert qa_stages == ["initial", "recheck"]

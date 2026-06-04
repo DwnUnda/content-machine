@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from datetime import datetime
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -92,3 +93,32 @@ def test_wordpress_export_refuses_not_ready_article(monkeypatch, tmp_path):
         job = db.get(ArticleJob, created["id"])
         with pytest.raises(ValueError, match="not ready for WordPress"):
             export_to_wordpress_draft(db, job)
+
+
+def test_local_export_uses_highest_id_for_same_timestamp_latest_qa(monkeypatch, tmp_path):
+    export_root = tmp_path / "Completed-Articles"
+    monkeypatch.setattr("app.core.config.COMPLETED_ARTICLES_DIR", export_root)
+    monkeypatch.setattr("app.services.local_exports.COMPLETED_ARTICLES_DIR", export_root)
+
+    client = TestClient(app)
+    created = client.post(
+        "/api/article-jobs",
+        json={"title": "QA Latest", "primary_keyword": "humidity", "post_type": "informational_blog"},
+    ).json()
+
+    same_time = datetime.utcnow()
+    with SessionLocal() as db:
+        db.add(QaReport(article_job_id=created["id"], status="needs_revision", score=80, passed_gate=False, created_at=same_time))
+        db.commit()
+        db.add(QaReport(article_job_id=created["id"], status="pass", score=91, passed_gate=True, created_at=same_time))
+        db.commit()
+        job = db.get(ArticleJob, created["id"])
+        from app.services.local_exports import sync_article_export
+
+        root = sync_article_export(db, job, reason="test_latest_qa_order")
+
+    import json
+
+    latest = json.loads((root / "qa" / "latest.json").read_text(encoding="utf-8"))
+    assert latest["status"] == "pass"
+    assert latest["score"] == 91

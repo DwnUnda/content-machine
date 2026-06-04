@@ -1811,6 +1811,8 @@ def run_full_workflow(db: Session, job: ArticleJob, *, research_mode: str) -> Wo
             return True, "Skipped: QA passed or found no actionable issues for a fix pass."
         if step_key == "qa_recheck" and (not needs_fix_pass or not fix_pass_completed) and not job.review_override:
             return True, "Skipped because no fix pass ran."
+        if step_key == "qa_recheck" and needs_fix_pass and fix_pass_completed:
+            return False, ""
         if (
             step_key == "qa"
             and step_state_map.get("qa", {}).get("status") == "failed"
@@ -1857,8 +1859,16 @@ def run_full_workflow(db: Session, job: ArticleJob, *, research_mode: str) -> Wo
         ("qa_recheck", lambda: run_qa(db, job, stage="recheck")),
     ]
 
-    needs_fix_pass = step_state_map.get("fix_pass", {}).get("status") in {"missing", "stale"}
-    fix_pass_completed = False
+    fix_pass_status = step_state_map.get("fix_pass", {}).get("status")
+    qa_status = step_state_map.get("qa", {}).get("status")
+    qa_recheck_status = step_state_map.get("qa_recheck", {}).get("status")
+    fix_pass_waiting_for_recheck = (
+        fix_pass_status in {"complete", "stale"}
+        and qa_recheck_status in {"missing", "stale", "failed"}
+        and qa_status in {"failed", "stale"}
+    )
+    needs_fix_pass = fix_pass_status in {"missing", "stale"} or fix_pass_waiting_for_recheck
+    fix_pass_completed = fix_pass_waiting_for_recheck
 
     try:
         for step_key, operation in operations:
@@ -1867,6 +1877,11 @@ def run_full_workflow(db: Session, job: ArticleJob, *, research_mode: str) -> Wo
             skip, skip_message = should_skip(step_key)
             if skip:
                 _update_workflow_step(db, step, status="skipped", message=skip_message)
+                if step_key == "fix_pass" and needs_fix_pass:
+                    # A reused fix pass still needs verification. Without this,
+                    # resumed batch runs can stop after "Reused current fix pass"
+                    # and leave the latest failed QA report as the source of truth.
+                    fix_pass_completed = True
                 create_app_log(
                     db,
                     event_type=f"workflow.full_draft.{step_key}.skipped",
